@@ -125,17 +125,17 @@ function finishRound(ctx: Ctx, g: TwentyOneState): void {
   g.turn = -1;
 }
 
-function collectAndShuffle(ctx: Ctx): void {
+function collectAndShuffle(ctx: Ctx, round: number): void {
   const { table, seats } = ctx;
   for (const zone of ['dealer', ...seats.map(handOf)]) {
     for (const c of table.items(zone)) table.move(c.id, 'deck');
   }
-  table.shuffle('deck');
+  table.shuffle('deck', `r${round}`); // each round's deal depends only on the seed and the round
 }
 
 export const twentyOne: GameModule<TwentyOneState> = {
   id: 'twenty-one',
-  version: '0.1.0',
+  version: '0.2.0',
 
   setup(ctx) {
     if (ctx.seats.length < 1 || ctx.seats.length > MAX_SEATS) {
@@ -146,7 +146,7 @@ export const twentyOne: GameModule<TwentyOneState> = {
     table.addZone('dealer', { visibility: 'public' });
     for (const seat of ctx.seats) table.addZone(handOf(seat), { visibility: 'public', owner: seat });
     table.create(cards.standardDeck(), 'deck');
-    table.shuffle('deck');
+    table.shuffle('deck', 'r1');
 
     const g: TwentyOneState = { phase: 'playing', round: 1, turn: -1, status: {}, results: {}, hole: '' };
     deal(ctx, g);
@@ -192,8 +192,8 @@ export const twentyOne: GameModule<TwentyOneState> = {
     const option = 'option' in answer ? answer.option : undefined;
 
     if (option === 'deal') {
-      collectAndShuffle(ctx);
       g.round += 1;
+      collectAndShuffle(ctx, g.round);
       deal(ctx, g);
       return [{ type: 'dealt', round: g.round }];
     }

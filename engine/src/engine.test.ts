@@ -53,7 +53,15 @@ describe('Rng', () => {
 
   it('rejects bad seeds and stream names', () => {
     expect(() => newRngState('xyz')).toThrow();
-    expect(() => new Rng(newRngState(SEED)).u32('a-very-long-stream-name')).toThrow();
+    expect(() => new Rng(newRngState(SEED)).u32('')).toThrow();
+    expect(() => new Rng(newRngState(SEED)).u32('x'.repeat(65))).toThrow();
+  });
+
+  it('keeps scoped streams independent of each other', () => {
+    const a = new Rng(newRngState(SEED));
+    const b = new Rng(newRngState(SEED));
+    for (let i = 0; i < 100; i++) a.u32('shuffle/r1'); // extra draws in round 1…
+    expect(a.u32('shuffle/r2')).toBe(b.u32('shuffle/r2')); // …don't shift round 2
   });
 });
 

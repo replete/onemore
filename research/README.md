@@ -18,11 +18,11 @@ The prompts are broad and stand alone. They say as little as possible about One 
 | # | Topic | Informs | Status |
 |---|---|---|---|
 | 01 | [How games are modelled in software](01-game-modelling-prompt.md) ([result](01-game-modelling-result.md)) | Engine contract (architecture §3), D-004, D-005, D-007, D-012 | Done (2026-09-26) |
-| 02 | [Card game families and building blocks](02-card-game-families-prompt.md) | Classic card game library, which games to build, 21 variants | Prompt written |
-| 03 | [Joining, host control and reconnection](03-join-and-reconnect-prompt.md) | D-009, D-010, D-011 | Prompt written |
-| 04 | [Randomness, shuffling and fairness](04-shuffling-and-fairness-prompt.md) ([result](04-shuffling-and-fairness-result.md)) | D-007, D-024 | Done (2026-09-26) |
-| 05 | [Synced timers, reaction races and response windows](05-timers-and-interrupts-prompt.md) | D-013, D-022, D-023 | Prompt written |
-| 06 | [Persistence for session-based game servers](06-session-persistence-prompt.md) | D-014 | Prompt written |
+| 02 | [Card game families and building blocks](02-card-game-families-prompt.md) ([result](02-card-game-families-result.md)) | D-036, 21 variations, classic card game library | Done (2026-09-26) |
+| 03 | [Joining, host control and reconnection](03-join-and-reconnect-prompt.md) ([result](03-join-and-reconnect-result.md)) | D-009, D-010, D-011, D-020, D-026, D-027, D-029 | Done (2026-09-26) |
+| 04 | [Randomness, shuffling and fairness](04-shuffling-and-fairness-prompt.md) ([result](04-shuffling-and-fairness-result.md)) | D-007, D-024, D-031 | Done (2026-09-26) |
+| 05 | [Synced timers, reaction races and response windows](05-timers-and-interrupts-prompt.md) ([result](05-timers-and-interrupts-result.md)) | D-013, D-022, D-023, D-032, D-033, D-034 | Done (2026-09-26) |
+| 06 | [Persistence for session-based game servers](06-session-persistence-prompt.md) ([result](06-session-persistence-result.md)) | D-014, D-035 | Done (2026-09-26) |
 | 07 | [Evaluate boardgame.io](07-boardgame-io-prompt.md) ([result](07-boardgame-io-result.md)) | D-019 | Done by Claude (2026-09-26) |
 | 08 | [Evaluate Colyseus](08-colyseus-prompt.md) ([result](08-colyseus-result.md)) | D-025 | Done by Claude (2026-09-26) |
 

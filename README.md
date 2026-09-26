@@ -13,8 +13,8 @@ pnpm install
 pnpm dev
 ```
 
-1. On the TV or laptop, open http://localhost:5173 and choose **Start a room**. Then choose **Make this the shared screen**.
-2. Phones on the same Wi-Fi scan the QR code. The dev server prints the LAN address, e.g. http://10.0.0.20:5173.
+1. On the TV or laptop, open http://localhost:5550 and choose **Start a room**. Then choose **Make this the shared screen**.
+2. Phones on the same Wi-Fi scan the QR code. The dev server prints the LAN address, e.g. http://10.0.0.20:5550.
 3. Press **Start game** once everyone's in.
 
 ## Test

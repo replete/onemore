@@ -10,9 +10,8 @@
 
 Things we still need to decide. Each one becomes a D-entry once it's decided.
 
-- Does fair first-response (D-022) hold up in testing? What are the right compensation cap and latency estimate? Research 03 didn't cover this. Research 05 might, and otherwise we find out by testing.
-- Which card games come after 21 and Shithead? (research 02)
-
+- Turn timers off by default, and fixed-pace response windows? (D-034, proposed)
+- Which card games come after 21 and Shithead? (D-036, proposed)
 ---
 
 ## D-001 Root working documents
@@ -362,7 +361,7 @@ Creating a room on a phone and then opening the link on a TV works too: the admi
 
 ## D-022 Fair first-response
 
-**Status:** Accepted, 2026-09-26, as a direction that still has to be proven in testing.
+**Status:** Accepted, 2026-09-26, as a direction that still has to be proven in testing. Details refined by D-032.
 
 **Context:** When several players answer the same `any` decision (e.g. "Snap!"), the first answer to reach the server wins (D-013). That favours players with faster connections.
 
@@ -399,7 +398,7 @@ Claude added three safeguards:
 
 ## D-024 Randomness: ChaCha20 with a 256-bit seed
 
-**Status:** Accepted, 2026-09-26. Research 04 may refine the details.
+**Status:** Accepted, 2026-09-26. Confirmed by research 04; details refined by D-031.
 
 **Context:** We need randomness that can't be predicted and that replays exactly (D-007). Fortuna (used on an earlier project) keeps reseeding itself from pools of new randomness. That's good for unpredictability, but it means a game could never be replayed from its seed.
 
@@ -501,3 +500,136 @@ Turn off its state sync (no `@colyseus/schema` or `StateView`), and send each vi
 - **Tests:** Vitest.
 
 **Consequences:** The engine package has no dependency on Colyseus or Svelte, so rules stay pure and can be tested on their own.
+
+## D-029 No profanity filter for names
+
+**Status:** Accepted, 2026-09-26
+
+**Context:** Research 03 found that Jackbox and Kahoot filter names, but those games are often streamed to strangers. One More is for people in the same room.
+
+**Decision:** No profanity filter for names. Names are limited to 16 characters, and admins can remove players.
+
+**Consequences:** Revisit this if remote play or streaming arrives.
+
+## D-030 Default ports
+
+**Status:** Accepted, 2026-09-26
+
+**Context:** The defaults (Colyseus 2567, Vite 5173) clash with other apps in development.
+
+**Decision:** The web client runs on **5550** and the game server on **5551**. Vite uses `strictPort`, so it fails rather than moving to another port. The server's port can still be set with `PORT`.
+
+**Consequences:** The client finds the server at `<same host>:5551` unless `VITE_SERVER_URL` is set.
+
+## D-031 Randomness details
+
+**Status:** Accepted, 2026-09-26. Refines D-024, based on [research 04](research/04-shuffling-and-fairness-result.md).
+
+**Context:** Research 04 confirmed D-024: ChaCha20, a 256-bit seed from the OS, `@noble/ciphers`, and Fisher–Yates with rejection sampling. Every real shuffle failure it found came from one of three causes: a biased algorithm, a guessable seed, or streams wired together carelessly (Slay the Spire). It recommends:
+
+- independent keys per stream;
+- a fresh shuffle each hand, from a canonical order;
+- recording the algorithm version;
+- testing the dealt output, not just the generator.
+
+**Decision:**
+
+- **Per-stream keys.** Each stream's key is HMAC-SHA256(seed, stream name), using `@noble/hashes`. Streams can be scoped: 21 shuffles round 3 from `shuffle/r3`. Extra draws in one stream or round never shift another.
+- **Canonical order.** Before every shuffle, the zone is put back in canonical order, so a deal depends only on the seed, the scope and which cards are there.
+- **Version.** Matches record `RNG_VERSION` (`chacha20-hmac-v1`), and replays refuse a mismatch.
+- **Tests:**
+  - golden outputs for a fixed seed, cross-checked against Node's OpenSSL ChaCha20;
+  - a statistical check over 60,000 shuffles that every card is equally likely in every position;
+  - a check that rules code never uses `Math.random`, `Date.now`, `new Date`, `performance.now` or `crypto`.
+
+**Consequences:**
+
+- Changing the generator means bumping `RNG_VERSION`, and old logs then won't replay.
+- Later, if players suspect a rigged shuffle, we can add a "verify this game" option. The server publishes SHA-256 of the seed at the start and reveals the seed at the end, so anyone can replay the shuffle.
+
+## D-032 Fair first-response, refined
+
+**Status:** Accepted, 2026-09-26. Refines D-022, based on [research 05](research/05-timers-and-interrupts-result.md). Still to be proven with real phones.
+
+**Context:** Research 05 found that in one room, the differences in network delay are far smaller than the differences in human reaction time. Client timestamps can be forged, as Lichess found. Rewinding time the way shooters do is overkill for a card game.
+
+**Decision:**
+
+- **The first valid claim wins,** with a short collection window of about **120 ms** from the first valid claim to settle near-ties.
+- **Near-ties are ranked by arrival time minus half the round trip,** using round trips the server measures itself (low percentile of recent pings). Client timestamps are never trusted.
+- **Exact ties go to seat order.**
+- **Show the margin** ("Alex by 45 ms"). Visible fairness matters more than millisecond accuracy.
+- **Reaction moments start at an announced server time,** and a claim that arrives impossibly early counts as a false start.
+- **Fair first-response stays a room option,** on by default for reaction games.
+
+**Consequences:** Every race resolves within about 120 ms of the first claim. We need server-side round-trip tracking, which comes with clock sync (D-033).
+
+## D-033 Clock sync and deadlines
+
+**Status:** Accepted, 2026-09-26. Implements D-013, based on [research 05](research/05-timers-and-interrupts-result.md).
+
+**Decision:**
+
+- **Clock sync.**
+  - On connect, the client sends 8–10 app-level pings about 100 ms apart. The server answers pings before anything else.
+  - The client's offset is the median of the lowest-round-trip quarter of samples, using `performance.now()` rather than `Date.now()`.
+  - It re-syncs every 15–30 seconds, when the page becomes visible, and after reconnecting. Samples with a round trip over twice the best are ignored.
+  - The server keeps each client's round trip, for tie-breaks (D-032).
+  - The pings double as the app-level heartbeat from D-026.
+- **Countdowns.** The server sends absolute deadlines. Clients draw them every animation frame, blend corrections over about 300 ms, and never count back up without saying why.
+- **Deadlines on the server.** An action is accepted if it arrives by the deadline plus a grace of min(150 ms, RTT/2 + 50 ms), with a capped amount of grace per round. Late actions are rejected with a clear message ("Too late by 0.3 s").
+
+**Consequences:** Expected clock error in one room is about 2–20 ms, well below what anyone can see in a countdown.
+
+## D-034 Turn timers off by default, fixed-pace response windows
+
+**Status:** Proposed
+
+**Context:** Research 05 found that casual players tolerate short, visible, forgiving timers, but hate waiting on someone stalling. People in the same room can just nudge each other. It also found that skipping response windows when nobody can respond leaks information (MTG Arena, Master Duel), and the only approach that leaks nothing is a window that always runs at the same pace.
+
+**Decision:**
+
+- **No turn timers by default.** A game can offer a generous one as an option: for example 60 seconds, with a visible rope in the last 15. The absence rules (D-026) still cover disconnected players.
+- **Blocking response windows (D-023)** open at a few fixed points for every eligible player, whether or not they hold a response. They run at a fixed short pace, about 2.5 seconds with a visible timer, and close early only if everyone passes by hand.
+- **A prompt setting can come later:** "always prompt" (the default), "smart", or "quick" for players who accept the tells.
+
+**Consequences:** Games stay unhurried, and response windows never give away a hand. Some windows cost a couple of seconds each.
+
+## D-035 Persistence, stage 0
+
+**Status:** Accepted, 2026-09-26. Refines D-014, based on [research 06](research/06-session-persistence-result.md).
+
+**Context:** Research 06 recommends keeping rooms in memory with an append-only action log and snapshots. Its staged plan starts with one server and SQLite in WAL mode, then Postgres and room routing across a few servers, then a fleet. It lists what's expensive to change later: log schema versioning, a deterministic reducer, room-local ids, no personal data in logs, a storage interface, and sequence numbers.
+
+**Decision:**
+
+- **Now:**
+  - JSON-lines files behind a small `MatchStore` interface;
+  - every line has a schema version (`v`), and every action has its sequence number (`seq`);
+  - seats only, never names or IPs.
+- **Next,** when rooms need to survive restarts:
+  - a SQLite (WAL) store behind the same interface;
+  - snapshots at round boundaries;
+  - rooms reloaded lazily when a player reconnects;
+  - deploys that drain rooms rather than kill them.
+- **Later:** stages 1 and 2 of research 06's plan, when the triggers it lists appear.
+
+**Consequences:**
+
+- A restart still ends live games until the SQLite stage.
+- Logs can be deleted freely, because they contain no personal data.
+
+## D-036 Card game roadmap
+
+**Status:** Proposed
+
+**Context:** [Research 02](research/02-card-game-families-result.md) mapped card games into about fifteen families built from a few recurring primitives. It found that most variants of folk games change only two switches: the special-card table, and the draw and penalty rules. Its shortlist for casual groups of 2–8 with newcomers is Cheat, Crazy Eights/Switch, Spoons/Pig, Shithead, Pontoon, Go Fish, President and Knockout Whist.
+
+**Decision:**
+
+- **The order:** 21 (banking), then Shithead (beating: hidden table cards, out-of-turn burns), then Crazy Eights/Switch (matching), then Cheat (bluffing and challenges), then Spoons (simultaneous play and a reaction race). Each one adds a family and a new primitive.
+- **House rules as options.** Each game ships its special-card table and its draw and penalty rules as options with a sensible default, because that's where groups disagree.
+- **Speed games need three explicit rules:** what counts as a valid claim, how ties are broken, and what a false claim costs. Research 02 found that without all three, arguments take over.
+
+**Consequences:** The engine library grows one family at a time: beat-or-pick-up, matching with special cards, face-down claims and challenges, and simultaneous passing.
+

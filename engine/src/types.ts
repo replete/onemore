@@ -108,6 +108,8 @@ export interface ZoneView {
 // --- Randomness (D-024) --------------------------------------------------------
 
 export interface RngState {
+  /** The algorithm version (RNG_VERSION); replays refuse a mismatch. */
+  version: string;
   /** 32 bytes as hex. Never leaves the server. */
   seed: string;
   /** 32-bit words consumed so far, per stream. */
@@ -132,6 +134,8 @@ export interface MatchState<G> {
 export interface MatchHeader {
   gameId: string;
   version: string;
+  /** RNG_VERSION the match was played with. */
+  rng: string;
   seats: SeatId[];
   options: Record<string, unknown>;
   seed: string;

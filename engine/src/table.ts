@@ -63,9 +63,15 @@ export class Table {
     this.rekey(id);
   }
 
-  shuffle(zone: string): void {
+  /**
+   * Shuffles a zone. Cards are first put in their canonical (creation) order, so the
+   * result depends only on the seed, the scope and which cards are there (research 04).
+   * Pass a scope such as `r3` to give each round its own stream.
+   */
+  shuffle(zone: string, scope?: string): void {
     const z = this.zone(zone);
-    this.rng.shuffle(SHUFFLE_STREAM, z.items);
+    z.items.sort((a, b) => Number(a.slice(1)) - Number(b.slice(1)));
+    this.rng.shuffle(scope ? `${SHUFFLE_STREAM}/${scope}` : SHUFFLE_STREAM, z.items);
     for (const id of z.items) this.rekey(id);
   }
 

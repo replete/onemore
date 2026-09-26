@@ -6,7 +6,7 @@ import { Client, type Room } from '@colyseus/sdk';
 import type { Answer } from '@onemore/engine';
 import type { AdminCommand, JoinOptions, RoomMessage, ViewMessage } from '@onemore/server/protocol';
 
-const endpoint = import.meta.env.VITE_SERVER_URL ?? `${location.protocol}//${location.hostname}:2567`;
+const endpoint = import.meta.env.VITE_SERVER_URL ?? `${location.protocol}//${location.hostname}:5551`;
 const tokenKey = (code: string) => `onemore:token:${code}`;
 
 export type Status = 'idle' | 'connecting' | 'connected' | 'reconnecting' | 'lost';

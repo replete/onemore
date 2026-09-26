@@ -23,19 +23,23 @@ Update the docs as part of the work, not afterwards. Docs use British English.
 
 ```sh
 pnpm install
-pnpm dev          # server on :2567, client on :5173 (also on your LAN IP)
+pnpm dev          # game server on :5551, web client on :5550 (also on your LAN IP)
 pnpm test         # all tests (vitest)
 pnpm typecheck    # every package, including svelte-check
 ```
 
 ## Rules for rules code
 
-- Mutate only the draft you're given (`ctx.g`, `ctx.table`). Use `ctx.rng` for all randomness. Never read clocks or `Math.random`.
+- Mutate only the draft you're given (`ctx.g`, `ctx.table`). Use `ctx.rng` for all randomness. Never read clocks or `Math.random`; `engine/src/determinism.test.ts` enforces this.
+- Scope shuffles per round (`table.shuffle('deck', `r${round}`)`), so one round's draws can't shift another's (D-031).
+- If you change the RNG, key derivation or shuffle, bump `RNG_VERSION`: the golden test in `engine/src/rng.golden.test.ts` will fail until you do.
 - Decision ids must be derived from state, so replays reproduce them.
 - Never compute anything shown to a viewer from cards they can't see. Use `visibleDefs` and `viewZone`.
 - Every game needs leak tests over every message a viewer receives: `secretsFor` + `findLeaks`, and `withHiddenShuffled` (which catches derived leaks such as totals). See `games/twenty-one/src/twenty-one.test.ts`.
 
 ## Gotchas
+
+- Match logs (`server/src/matchLog.ts`) record seats only. Never put names or IPs in them (D-035).
 
 - Colyseus is 0.18: import from `colyseus` and `@colyseus/sdk`, not `colyseus.js`.
 - TypeScript is pinned to 6.x because svelte-check doesn't support TypeScript 7 yet.

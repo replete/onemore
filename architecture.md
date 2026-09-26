@@ -104,7 +104,7 @@ The client is untrusted. Assume anyone can open dev tools, edit the JavaScript o
 | Rigging or predicting shuffles | Randomness only happens on the server. Seeds come from a secure random source and never leave the server, because anyone who knew the seed could predict every shuffle. |
 | Acting as another player | Seat tokens. Actions are only accepted from that seat's own connection. |
 | Joining a room uninvited | Meet-style codes have about 3 × 10^11 combinations, so they can't be guessed. Code lookups are rate-limited per IP address anyway, which is what stopped Jackbox's codes being brute-forced (research 03). Admins can lock the room, remove participants, or turn on lobby approval. |
-| Offensive names or codes | Names have a length limit and a profanity filter, and admins can remove players. Codes contain no vowels, and a blocklist catches anything left. |
+| Offensive names or codes | Names have a length limit, and admins can remove players. There's no profanity filter for names (D-029). Codes contain no vowels, and a blocklist catches anything left. |
 | Becoming an admin uninvited | The admin QR code carries a separate code from the room. It's only shown on the shared screen's join screen before the game starts. During the game, admins are marked, so everyone can see who they are. |
 | Spectators taking seats | The spectator link uses a different code from the room. |
 | Players showing each other their phones | Not our problem, same as with real cards. |
@@ -212,7 +212,7 @@ That one mechanism covers the common shapes of play:
 - **Simultaneous play:** an `each` decision (Shithead's opening swap, drafting, bidding).
 - **Out-of-turn interrupts** (D-013, D-023) come in two kinds:
   - **Non-blocking (the default).** An `any` decision that sits alongside the normal turn instead of on top of it. Play doesn't pause, and the first valid claim wins. This covers "Snap!", and cut-ins and burns in Shithead. Prompts are private and nothing on the shared screen changes, so nobody learns who could have responded.
-  - **Blocking windows**, only where the rules need a pause, such as counter-spells. Whether one opens depends only on public information: it opens for every eligible seat, whether or not they hold a response. It runs for a fixed, short time and closes early only if everyone passes by hand. There's no auto-pass unless a game opts in.
+  - **Blocking windows**, only where the rules need a pause, such as counter-spells. They open at a few fixed points for every eligible seat, whether or not the player holds a response. Each runs at a fixed short pace (about 2.5 s, with a visible timer) and closes early only if everyone passes by hand. There's no auto-pass unless a game opts in (D-034, proposed). Research 05 found this is the only approach that never gives away a hand.
 - **Chains of effects:** responses to responses stack up and resolve in order, like Magic's stack.
 
 The references are TAG's `IExtendedSequence` stack, BGA's `MULTIPLE_ACTIVE_PLAYER` states, boardgame.io's stages, and Hearthstone's blocks.
@@ -221,10 +221,20 @@ The references are TAG's `IExtendedSequence` stack, BGA's `MULTIPLE_ACTIVE_PLAYE
 
 - Rules modules never read a clock (D-007). A pending decision declares its timer as a duration. The room layer arms the timer when the decision appears and cancels it when the decision goes away.
 - When a timer expires, the room layer submits a system `timeout` action for that decision, which is applied and logged like any other action. Replays read timeouts from the log, not the clock, so they stay deterministic.
-- Deadlines go to clients as absolute server times. Clients correct for their clock offset (from `ping`/`pong`), so every device shows the same countdown.
-- If two answers to an `any` decision race, the first valid one wins, and the log fixes the order. With **Fair first-response** on (D-022), the server orders answers by arrival time minus each client's estimated latency. The compensation is capped at around 150 ms, the estimate uses a low percentile of recent pings, and the server waits for the length of the cap before deciding.
+- Deadlines go to clients as absolute server times, and every device shows the same countdown (D-033):
+  - The client syncs its clock with 8–10 pings on connect, then every 15–30 s and when the page becomes visible. Its offset is the median of the lowest-round-trip quarter of samples, measured with `performance.now()`.
+  - The client draws countdowns every animation frame and blends in corrections.
+  - The server accepts an action up to the deadline plus a small capped grace, min(150 ms, RTT/2 + 50 ms), and rejects anything later with a clear message.
+  - The pings double as the heartbeat that detects dead connections.
+- **Turn timers are off by default** (D-034, proposed): people in the same room can nudge each other. A game can offer a generous timer, e.g. 60 s with a visible rope in the last 15 s.
+- If two answers to an `any` decision race, the first valid one wins, and the log fixes the order. With **Fair first-response** on (D-022, D-032):
+  - The server collects claims for about 120 ms after the first valid one.
+  - It ranks them by arrival time minus half each client's round trip, using round trips it measured itself. Client timestamps are never trusted.
+  - Exact ties go to seat order.
+  - Players see the margin ("Alex by 45 ms").
+  - Reaction moments start at an announced server time, and impossibly early claims count as false starts.
 
-Research 05 may refine fair first-response and the timing of response windows.
+Research 05 found that in one room, differences in network delay are much smaller than differences in reaction time, so this is about settling near-ties fairly, not about correcting large gaps.
 
 ### 3.5 Prompts and the UI
 
@@ -266,11 +276,13 @@ Research 01 suggests some rules for the later features:
 - **Bots** only see the view of the seat they play for. If they simulate ahead, they use their own random seed, so they can't learn about upcoming shuffles.
 - **Replays** need the exact rules and content versions. Rooms already pin both.
 
-Randomness (D-024, proposed until research 04 confirms it):
+Randomness (D-024, D-031; confirmed by research 04):
 
 - **Seed:** 256 bits from the operating system's secure random source, one seed per room, never sent to clients.
-- **Generator:** ChaCha20 keyed by the seed, from `@noble/ciphers`, with a separate stream for each purpose.
-- **Shuffle:** Fisher–Yates, drawing unbiased integers by rejection sampling.
+- **Generator:** ChaCha20 from `@noble/ciphers`. Each named stream is keyed by HMAC-SHA256(seed, name), so streams are independent and can be scoped: round 3 deals from `shuffle/r3`.
+- **Shuffle:** Fisher–Yates, drawing unbiased integers by rejection sampling, always starting from the canonical card order. A deal depends only on the seed, the round and which cards are there.
+- **Version:** matches record `RNG_VERSION`, and replays refuse a mismatch.
+- **Tests:** golden outputs cross-checked against OpenSSL, a statistical check that shuffles are uniform, and a scan that bans clocks and `Math.random` from rules code.
 
 Saved replays (a seed, actions and the expected views) double as regression tests.
 
@@ -288,6 +300,8 @@ Research 01 backs this. Every broad declarative rules language it looked at hit 
 - **Library:** shuffle, deal, draw, rank orders (ace high or low, trumps), sets and runs, trick-taking, poker hand evaluation, turn rotation, betting and chips.
 - **First game: 21** (D-015). It has one hidden card, simple actions (hit or stand) and a clear result. A minimal version with no betting doubles as the walking skeleton.
 - **Second game: Shithead.** It tests what 21 doesn't: hidden, owner-only and public zones in one game, a simultaneous opening swap, and out-of-turn play with timers.
+- **Then** (D-036, proposed; research 02): Crazy Eights/Switch (matching with special cards), Cheat (face-down claims and challenges), and Spoons (simultaneous passing and a reaction race). Each game adds one family and one new primitive.
+- **House rules are options.** Research 02 found that most variants of a folk game change only two switches: which cards have special powers, and the draw and penalty rules. Each game ships those as options, with a sensible default.
 
 ### Collectible / deck-building card games
 
@@ -322,4 +336,8 @@ Research 01 backs this. Every broad declarative rules language it looked at hit 
 
 We're using TypeScript on both server and client (D-008). The room layer runs on Colyseus with its state sync turned off (D-025, [research 08](research/08-colyseus-result.md)). The engine doesn't depend on Colyseus.
 
-**Persistence** (D-014): rooms live in memory to start with, and action logs are appended to disk. A store that survives restarts comes later (research 06).
+**Persistence** (D-014, D-035; research 06):
+
+- **Now:** rooms live in memory. Every action is appended to a JSON-lines log behind a small `MatchStore` interface. Each line carries a schema version and a sequence number. Logs record seats only, never names.
+- **Next:** a SQLite (WAL) store behind the same interface, with snapshots at round boundaries and rooms reloaded lazily when someone reconnects. Deploys will drain rooms rather than kill them.
+- **Later:** Postgres and room routing across a few servers, then a fleet, when research 06's triggers appear.

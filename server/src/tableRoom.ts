@@ -18,7 +18,7 @@ import {
 } from '@onemore/engine';
 import { MAX_SEATS, twentyOne, type TwentyOneState } from '@onemore/twenty-one';
 import { generateCode, newSecret } from './codes';
-import { MatchLog } from './matchLog';
+import { FileMatchStore, type MatchRecorder, type MatchStore } from './matchLog';
 import type {
   ActMessage,
   AdminCommand,
@@ -37,6 +37,7 @@ const NAME_MAX = 16;
 
 /** Codes of rooms alive in this process, to redraw on collision (D-027). */
 const activeCodes = new Set<string>();
+const store: MatchStore = new FileMatchStore();
 
 interface Participant {
   id: string;
@@ -67,7 +68,7 @@ export class TableRoom extends Room {
   private readonly participants = new Map<string, Participant>();
   private joinCounter = 0;
   private match: MatchState<TwentyOneState> | undefined;
-  private log: MatchLog | undefined;
+  private log: MatchRecorder | undefined;
   /** Grace timers for absent players, keyed by `${decision}|${seat}`. */
   private readonly grace = new Map<string, { timer: Delayed; until: number }>();
   private emptyTimer: Delayed | undefined;
@@ -82,6 +83,7 @@ export class TableRoom extends Room {
     this.onMessage('admin', (client, message: unknown) => this.onAdmin(client, message));
     this.onMessage('name', (client, message: unknown) => this.onName(client, message));
     this.clock.setInterval(() => this.checkAdmins(), 10_000);
+    this.checkEmpty(); // a room nobody ever joins still gets cleaned up
   }
 
   override onJoin(client: Client, options?: JoinOptions): void {
@@ -219,15 +221,15 @@ export class TableRoom extends Room {
     if (players.length < 1) return this.fail(client, 'Need at least one player.');
     if (players.length > MAX_SEATS) return this.fail(client, `This game seats up to ${MAX_SEATS}.`);
 
-    const names: Record<SeatId, string> = {};
+    const seats: SeatId[] = [];
     players.forEach((p, i) => {
       p.seat = `s${i + 1}`;
       p.autoplay = false;
       if (!p.name) p.name = `Player ${i + 1}`;
-      names[p.seat] = p.name;
+      seats.push(p.seat);
     });
-    this.match = createMatch(this.game, { seats: Object.keys(names), options: {}, seed: newSeed() });
-    this.log = new MatchLog(this.code, headerOf(this.match), names);
+    this.match = createMatch(this.game, { seats, options: {}, seed: newSeed() });
+    this.log = store.start(this.code, headerOf(this.match)); // seats only: no names in logs (D-035)
     this.phase = 'playing';
     this.refreshAll();
   }
@@ -235,7 +237,7 @@ export class TableRoom extends Room {
   private commit(result: SubmitResult<TwentyOneState>, client?: Client): void {
     if (!result.ok) return client ? this.fail(client, result.error) : undefined;
     this.match = result.state;
-    this.log?.append(result.entry);
+    this.log?.append(result.entry, result.state.rev);
     this.settle();
     this.sendViews();
   }
@@ -249,7 +251,7 @@ export class TableRoom extends Room {
       const result: SubmitResult<TwentyOneState> = autoAnswer(this.game, this.match, decision);
       if (!result.ok) break;
       this.match = result.state;
-      this.log?.append(result.entry);
+      this.log?.append(result.entry, result.state.rev);
     }
 
     const needed = new Set<string>();

@@ -172,3 +172,37 @@ describe('table room', () => {
     await Promise.all([tv, back].map((t) => t.room.leave()));
   });
 });
+
+describe('match logs', () => {
+  it('replay exactly, carry versions and sequence numbers, and contain no names', async () => {
+    const { readdirSync, readFileSync } = await import('node:fs');
+    const { replay } = await import('@onemore/engine');
+    const { twentyOne } = await import('@onemore/twenty-one');
+    const dir = process.env['ONEMORE_LOG_DIR']!;
+
+    const tv = await Tester.create();
+    tv.room.send('admin', { type: 'make-screen' });
+    await tv.until(() => tv.latest.room!.you.role === 'screen');
+    const sam = await Tester.join(tv.code, { name: 'Samantha' });
+    tv.room.send('admin', { type: 'start' });
+    await sam.until(() => sam.latest.view !== undefined);
+    for (let i = 0; i < 5 && sam.latest.view!.view.phase === 'playing'; i++) {
+      const d = sam.latest.view!.decisions.find((x) => x.mode === 'one');
+      if (!d) break;
+      const rev = sam.latest.view!.rev;
+      sam.room.send('act', { decision: d.id, answer: { option: 'hit' } });
+      await sam.until(() => sam.latest.view!.rev > rev);
+    }
+
+    const file = readdirSync(dir).find((f) => f.startsWith(tv.code));
+    const text = readFileSync(join(dir, file!), 'utf8');
+    expect(text).not.toContain('Samantha');
+    const lines = text.trim().split('\n').map((l) => JSON.parse(l));
+    expect(lines.every((l) => l.v === 1)).toBe(true);
+    const [header, ...actions] = lines;
+    expect(actions.map((a) => a.seq)).toEqual(actions.map((_, i) => i + 1));
+    const state = replay(twentyOne, header.header, actions.map(({ by, decision, answer, auto }) => ({ by, decision, answer, ...(auto ? { auto } : {}) })));
+    expect(state.rev).toBe(actions.length);
+    await Promise.all([tv, sam].map((t) => t.room.leave()));
+  });
+});

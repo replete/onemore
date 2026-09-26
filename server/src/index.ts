@@ -6,7 +6,7 @@ export function createServer() {
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
-  const port = Number(process.env['PORT'] ?? 2567);
+  const port = Number(process.env['PORT'] ?? 5551);
   await createServer().listen(port, '0.0.0.0');
   console.log(`One More server listening on :${port}`);
 }

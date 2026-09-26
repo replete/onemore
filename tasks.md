@@ -5,8 +5,8 @@
 ## Now
 
 - [ ] You: play it on a real TV and real phones on the same Wi-Fi (see [README.md](README.md)). Note anything that feels wrong.
-- [ ] Claude: write the rules of 21 and its variations, using research 02 (D-021).
-- [ ] Run research 04 through deep research; it confirms or refines D-024.
+- [ ] Claude: write the rules of 21 and its variations, using research 02 (D-021, D-036).
+- [ ] You: accept, change or reject D-034 (no turn timers by default; fixed-pace response windows) and D-036 (card game roadmap).
 
 ## Next
 
@@ -14,8 +14,9 @@ Gaps left in the walking skeleton:
 
 - [ ] Lost tokens: "Are you Sam? Rejoin", approved by an admin (D-026).
 - [ ] Mirror the reconnect token in an HttpOnly cookie (D-026).
-- [ ] App-level heartbeat on the client, so connections that have quietly died are caught (D-026).
-- [ ] Rate-limit code lookups per IP address, and add a profanity filter for names (D-027, architecture §2).
+- [ ] Clock sync over app-level pings, which also serve as the heartbeat for connections that have quietly died. The server tracks each client's round trip. Countdowns are drawn from absolute deadlines (D-026, D-033).
+- [ ] Jittered exponential backoff on reconnect, so a server restart doesn't cause a reconnection storm (research 06).
+- [ ] Rate-limit code lookups per IP address (D-027, architecture §2).
 - [ ] HTTPS for LAN play, so the screen wake lock works (mkcert or a tunnel).
 - [ ] Late joiners: take a seat at the next round rather than only when the game starts.
 - [ ] The server serves the built client, so one process runs everything.
@@ -26,17 +27,18 @@ Then:
 - [ ] A standard 52-card deck content pack, plus a generic renderer for cards and zones.
 - [ ] Drag and drop on the phone, driven by prompts ([architecture §3.5](architecture.md#35-prompts-and-the-ui)).
 - [ ] 21 v1: the base game plus its variations as options (D-021).
-- [ ] Choose the card games that come after 21 and Shithead (research 02).
+- [ ] Shithead, then Crazy Eights/Switch, Cheat and Spoons, with house rules as options (D-036).
 
 ## Later
 
 - [ ] Run research 05–06 when their decisions come up.
 - [ ] Shithead, the second game: interrupts, response windows and synced timers (D-013).
 - [ ] Spectator links (D-011), screen layouts per game, turning any client into a screen, and lobby approval (D-020).
-- [ ] Fair first-response (D-022): prototype it and prove it with simulated latency and real phones.
+- [ ] Fair first-response (D-032): a 120 ms collection window, ranking by server-measured round trips, and margins shown. Prove it with simulated latency and real phones.
 - [ ] A tile-laying prototype (Carcassonne-like) to test boards, geometry and the shared screen.
 - [ ] A collectible card prototype: a tiny set of about 20 cards, the effects vocabulary and the effect queue.
-- [ ] Rooms that survive restarts (D-014, research 06).
+- [ ] Rooms that survive restarts: a SQLite (WAL) store behind `MatchStore`, snapshots at round boundaries, rooms reloaded lazily when someone reconnects, and drain-based deploys (D-035).
+- [ ] "Verify this game": publish SHA-256 of the seed at the start and reveal the seed at the end (D-031).
 - [ ] Interactive tablet mode.
 - [ ] Remote play.
 - [ ] Accounts and saved decks.
@@ -44,6 +46,10 @@ Then:
 
 ## Done
 
+- [x] 2026-09-26 Reviewed research 02, 04, 05 and 06, recorded as D-031 to D-036:
+  - randomness: per-stream HMAC keys, per-round shuffles, a version in the header, golden and uniformity tests, and a scan for clocks and `Math.random` in rules code;
+  - match logs: versioned lines, sequence numbers, no names, and a `MatchStore` interface.
+- [x] 2026-09-26 Moved the default ports to 5550 (web) and 5551 (game server) (D-030). Dropped the profanity filter for names (D-029).
 - [x] 2026-09-26 Walking skeleton, tested end to end in a real browser (a TV and two phones):
   - repo: a pnpm workspace with `engine`, `games/twenty-one`, `server` and `client`, plus `CLAUDE.md` (D-028);
   - engine v0: pending decisions with typed prompts, ChaCha20 randomness, zones with per-viewer visibility and opaque refs, replay, and leak tests that also catch derived leaks;

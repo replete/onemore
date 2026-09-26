@@ -1,5 +1,5 @@
 export * from './types';
-export { Rng, newSeed, newRngState } from './rng';
+export { RNG_VERSION, Rng, newSeed, newRngState } from './rng';
 export { Table, canSee, viewZone, visibleDefs } from './table';
 export {
   applyAnswer,

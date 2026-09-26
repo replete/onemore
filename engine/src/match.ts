@@ -3,7 +3,7 @@
 // Rules mutate a draft: the engine clones the state before every setup/apply, so
 // from the outside every step is pure and deterministic (D-007).
 
-import { Rng, newRngState } from './rng';
+import { RNG_VERSION, Rng, newRngState } from './rng';
 import { Table } from './table';
 import type {
   Answer,
@@ -51,7 +51,10 @@ export type SubmitResult<G> =
   | { ok: true; state: MatchState<G>; events: GameEvent[]; entry: LogEntry }
   | { ok: false; error: string };
 
-export function createMatch<G>(game: GameModule<G>, header: Omit<MatchHeader, 'gameId' | 'version'>): MatchState<G> {
+export function createMatch<G>(
+  game: GameModule<G>,
+  header: Omit<MatchHeader, 'gameId' | 'version' | 'rng'>,
+): MatchState<G> {
   const state: MatchState<G> = {
     game: { id: game.id, version: game.version },
     seats: [...header.seats],
@@ -72,6 +75,7 @@ export function headerOf(state: MatchState<unknown>): MatchHeader {
   return {
     gameId: state.game.id,
     version: state.game.version,
+    rng: state.rng.version,
     seats: [...state.seats],
     options: structuredClone(state.options),
     seed: state.rng.seed, // the seed never changes; streams only record how much was drawn
@@ -150,6 +154,7 @@ export function replay<G>(game: GameModule<G>, header: MatchHeader, log: LogEntr
   if (header.gameId !== game.id || header.version !== game.version) {
     throw new Error(`log is for ${header.gameId}@${header.version}, not ${game.id}@${game.version}`);
   }
+  if (header.rng !== RNG_VERSION) throw new Error(`log uses rng ${header.rng}, not ${RNG_VERSION}`);
   let state = createMatch(game, header);
   for (const [i, entry] of log.entries()) {
     const result = applyAnswer(game, state, entry);
