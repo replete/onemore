@@ -206,3 +206,45 @@ describe('match logs', () => {
     await Promise.all([tv, sam].map((t) => t.room.leave()));
   });
 });
+
+describe('choosing a game', () => {
+  it('lets admins pick the game and its options, checks the player count, and plays it', async () => {
+    const tv = await Tester.create();
+    const sam = await Tester.join(tv.code, { name: 'Sam' });
+    expect(tv.latest.room!.games.map((g) => g.id)).toEqual(['twenty-one', 'carcass-eon']);
+
+    // Only admins can change the game.
+    sam.room.send('admin', { type: 'set-game', game: 'carcass-eon' });
+    await sam.until(() => sam.latest.error !== undefined);
+    expect(sam.latest.room!.game).toBe('twenty-one');
+
+    tv.room.send('admin', { type: 'set-game', game: 'carcass-eon' });
+    await tv.until(() => tv.latest.room!.game === 'carcass-eon');
+    expect(tv.latest.room!.options).toEqual({ farmers: true });
+    tv.room.send('admin', { type: 'set-option', option: 'farmers', value: false });
+    await tv.until(() => tv.latest.room!.options['farmers'] === false);
+
+    // The TV is a player until it becomes a screen: with it as a screen, Sam alone is too few.
+    tv.room.send('admin', { type: 'make-screen' });
+    await tv.until(() => tv.latest.room!.you.role === 'screen');
+    tv.room.send('admin', { type: 'start' });
+    await tv.until(() => tv.latest.error?.message.includes('at least 2') ?? false);
+
+    const jo = await Tester.join(tv.code, { name: 'Jo' });
+    tv.room.send('admin', { type: 'start' });
+    await tv.until(() => tv.latest.view !== undefined);
+    const view = tv.latest.view!.view as unknown as { board: unknown[]; farmers: boolean; current: string };
+    expect(view.board).toHaveLength(1);
+    expect(view.farmers).toBe(false);
+
+    // Whoever has the place decision places the tile somewhere legal.
+    await Promise.all([sam, jo].map((t) => t.until(() => t.latest.view !== undefined)));
+    const mover = [sam, jo].find((t) => t.latest.view!.decisions.some((d) => d.prompt.kind === 'place'))!;
+    const d = mover.latest.view!.decisions[0]!;
+    const rev = tv.latest.view!.rev;
+    mover.room.send('act', { decision: d.id, answer: { site: d.prompt.kind === 'place' ? d.prompt.sites[0] : '' } });
+    await tv.until(() => tv.latest.view!.rev > rev);
+    expect((tv.latest.view!.view as unknown as { board: unknown[] }).board).toHaveLength(2);
+    await Promise.all([tv, sam, jo].map((t) => t.room.leave()));
+  });
+});

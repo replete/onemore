@@ -16,8 +16,8 @@ import {
   type SubmitResult,
   type Viewer,
 } from '@onemore/engine';
-import { MAX_SEATS, twentyOne, type TwentyOneState } from '@onemore/twenty-one';
 import { generateCode, newSecret } from './codes';
+import { DEFAULT_GAME, GAMES, defaultOptions } from './games';
 import { FileMatchStore, type MatchRecorder, type MatchStore } from './matchLog';
 import type {
   ActMessage,
@@ -54,20 +54,24 @@ interface Participant {
   reconnection?: Deferred<Client>;
 }
 
-type Game = GameModule<TwentyOneState>;
+type Game = GameModule<unknown>;
 
 export class TableRoom extends Room {
   override maxClients = 24;
   override maxMessagesPerSecond = 20;
   override autoDispose = false;
 
-  private readonly game: Game = twentyOne;
+  /** The game chosen in the lobby, and its options (D-020). */
+  private gameId = DEFAULT_GAME;
+  private options: Record<string, boolean> = defaultOptions(GAMES[DEFAULT_GAME]!.meta);
+  /** The rules module of the match in play; fixed when the game starts. */
+  private game: Game = GAMES[DEFAULT_GAME]!.module;
   private readonly adminCode = newSecret();
   private code = '';
   private phase: Phase = 'lobby';
   private readonly participants = new Map<string, Participant>();
   private joinCounter = 0;
-  private match: MatchState<TwentyOneState> | undefined;
+  private match: MatchState<unknown> | undefined;
   private log: MatchRecorder | undefined;
   /** Grace timers for absent players, keyed by `${decision}|${seat}`. */
   private readonly grace = new Map<string, { timer: Delayed; until: number }>();
@@ -156,6 +160,21 @@ export class TableRoom extends Room {
     switch (cmd?.type) {
       case 'start':
         return this.start(client);
+      case 'set-game': {
+        if (this.phase !== 'lobby') return this.fail(client, 'Finish this game first.');
+        const entry = GAMES[(cmd as { game?: string }).game ?? ''];
+        if (!entry) return this.fail(client, 'No such game.');
+        this.gameId = entry.meta.id;
+        this.options = defaultOptions(entry.meta);
+        return this.refreshAll();
+      }
+      case 'set-option': {
+        if (this.phase !== 'lobby') return this.fail(client, 'Finish this game first.');
+        const option = GAMES[this.gameId]!.meta.options.find((o) => o.id === cmd.option);
+        if (!option || typeof cmd.value !== 'boolean') return this.fail(client, 'No such option.');
+        this.options[option.id] = cmd.value;
+        return this.refreshAll();
+      }
       case 'new-game':
         this.phase = 'lobby';
         this.match = undefined;
@@ -217,9 +236,10 @@ export class TableRoom extends Room {
 
   private start(client: Client): void {
     if (this.phase !== 'lobby') return this.fail(client, 'The game has already started.');
+    const { meta, module } = GAMES[this.gameId]!;
     const players = this.ordered().filter((p) => p.role === 'player');
-    if (players.length < 1) return this.fail(client, 'Need at least one player.');
-    if (players.length > MAX_SEATS) return this.fail(client, `This game seats up to ${MAX_SEATS}.`);
+    if (players.length < meta.minSeats) return this.fail(client, `${meta.name} needs at least ${meta.minSeats} players.`);
+    if (players.length > meta.maxSeats) return this.fail(client, `${meta.name} seats up to ${meta.maxSeats}.`);
 
     const seats: SeatId[] = [];
     players.forEach((p, i) => {
@@ -228,13 +248,14 @@ export class TableRoom extends Room {
       if (!p.name) p.name = `Player ${i + 1}`;
       seats.push(p.seat);
     });
-    this.match = createMatch(this.game, { seats, options: {}, seed: newSeed() });
+    this.game = module;
+    this.match = createMatch(this.game, { seats, options: { ...this.options }, seed: newSeed() });
     this.log = store.start(this.code, headerOf(this.match)); // seats only: no names in logs (D-035)
     this.phase = 'playing';
     this.refreshAll();
   }
 
-  private commit(result: SubmitResult<TwentyOneState>, client?: Client): void {
+  private commit(result: SubmitResult<unknown>, client?: Client): void {
     if (!result.ok) return client ? this.fail(client, result.error) : undefined;
     this.match = result.state;
     this.log?.append(result.entry, result.state.rev);
@@ -248,7 +269,7 @@ export class TableRoom extends Room {
     for (let guard = 0; guard < 500; guard++) {
       const decision = this.waitingOnAbsent().find(({ p }) => p.autoplay)?.decision;
       if (!decision) break;
-      const result: SubmitResult<TwentyOneState> = autoAnswer(this.game, this.match, decision);
+      const result: SubmitResult<unknown> = autoAnswer(this.game, this.match, decision);
       if (!result.ok) break;
       this.match = result.state;
       this.log?.append(result.entry, result.state.rev);
@@ -312,8 +333,9 @@ export class TableRoom extends Room {
       const message: RoomMessage = {
         code: this.code,
         phase: this.phase,
-        game: this.game.id,
-        maxSeats: MAX_SEATS,
+        game: this.gameId,
+        games: Object.values(GAMES).map((g) => g.meta),
+        options: { ...this.options },
         you: info(p),
         participants,
       };

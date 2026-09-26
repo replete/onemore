@@ -152,3 +152,24 @@ export interface LogEntry {
 export type Outcome = { results: Record<SeatId, string> };
 
 export type GameEvent = { type: string; [key: string]: unknown };
+
+// --- Game catalogue -----------------------------------------------------------------
+
+/** A setting admins can change in Game options before starting (D-020, D-034). */
+export interface GameOption {
+  id: string;
+  label: string;
+  description?: string;
+  type: 'boolean';
+  default: boolean;
+}
+
+/** What the lobby needs to know about a game, without loading its rules. */
+export interface GameMeta {
+  id: string;
+  name: string;
+  blurb: string;
+  minSeats: number;
+  maxSeats: number;
+  options: GameOption[];
+}

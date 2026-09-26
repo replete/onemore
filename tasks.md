@@ -9,8 +9,10 @@
   - [x] tile data for all 24 types, a procedural SVG renderer and a contact sheet (`pnpm --filter @onemore/carcass-eon sheet`);
   - [x] unit tests for matching, joining, completion and scoring;
   - [x] the rules module, with random games, leak tests and replay;
-  - [ ] the server picks the game: a game choice in the lobby, and seat limits per game;
-  - [ ] the board component (pan and zoom) and the placement and follower interactions;
+  - [x] the server picks the game: a game choice in the lobby, options such as Farmers, and seat limits per game;
+  - [x] the board component (pan, pinch and scroll zoom, auto-fit) and the placement and follower interactions;
+  - [ ] show what just scored (e.g. "Sam +8: city"), and a short animation when a tile lands;
+  - [ ] screen layouts: Whole map, or Follow the action (D-020);
   - [ ] the WaveSpeed art trial, then your feedback (D-038).
 
 ## Next
@@ -51,6 +53,7 @@ Then:
 
 ## Done
 
+- [x] 2026-09-26 Carcass Eon is playable: a game picker and options in the lobby (phone and shared screen), a board with pan and zoom, tile placement with preview and rotation, and follower spots. Tested end to end in Chrome with a TV and two phones.
 - [x] 2026-09-26 Carcass Eon scope decided (D-039): medieval theme, classic tiles, 2–5 players, Farmers on by default.
 - [x] 2026-09-26 Carcass Eon design (D-038): rules, tile set, engine mapping, screens and art plan. Turn timers made an optional game setting (D-034). `.env` added to `.gitignore`.
 - [x] 2026-09-26 Reviewed research 02, 04, 05 and 06, recorded as D-031 to D-036:

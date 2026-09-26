@@ -7,6 +7,7 @@ import {
   viewZone,
   visibleDefs,
   type CardView,
+  type GameMeta,
   type GameModule,
   type MatchState,
   type PendingDecision,
@@ -16,6 +17,15 @@ import {
 } from '@onemore/engine';
 
 export const MAX_SEATS = 7;
+
+export const meta: GameMeta = {
+  id: 'twenty-one',
+  name: '21',
+  blurb: 'Beat the dealer without going over 21.',
+  minSeats: 1,
+  maxSeats: MAX_SEATS,
+  options: [],
+};
 
 export type Status = 'playing' | 'stood' | 'bust' | 'twenty-one' | 'natural';
 export type Result = 'win' | 'lose' | 'push';

@@ -11,7 +11,8 @@
   },
   "dependencies": {
     "@colyseus/sdk": "^0.18.4",
-    "qrcode": "^1.5.4"
+    "qrcode": "^1.5.4",
+    "@onemore/carcass-eon": "workspace:*"
   },
   "devDependencies": {
     "@onemore/engine": "workspace:*",

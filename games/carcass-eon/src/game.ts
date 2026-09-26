@@ -2,13 +2,30 @@
 // then optionally place a follower on it. Completed features score at once; at the
 // end, unfinished features and (with Farmers on) fields score.
 
-import type { GameEvent, GameModule, MatchState, PendingDecision, SeatId, SetupContext } from '@onemore/engine';
+import type { GameEvent, GameMeta, GameModule, MatchState, PendingDecision, SeatId, SetupContext } from '@onemore/engine';
 import { fits, legalPlacements, majority, regionPoints, regions, cellKey, type Board, type Follower } from './map';
 import { START_TILE, bagContents, tileDef, type FeatureKind } from './tiles';
 
 export const MIN_SEATS = 2;
 export const MAX_SEATS = 5;
 export const FOLLOWERS = 7;
+
+export const meta: GameMeta = {
+  id: 'carcass-eon',
+  name: 'Carcass Eon',
+  blurb: 'Build a medieval landscape tile by tile, and claim its roads, cities and fields.',
+  minSeats: MIN_SEATS,
+  maxSeats: MAX_SEATS,
+  options: [
+    {
+      id: 'farmers',
+      label: 'Farmers',
+      description: 'Followers can lie in fields. Each field scores 3 per completed city it touches at the end.',
+      type: 'boolean',
+      default: true,
+    },
+  ],
+};
 
 export interface CarcassState {
   phase: 'place' | 'follow' | 'done';

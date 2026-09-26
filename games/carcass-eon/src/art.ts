@@ -110,7 +110,7 @@ function roadPath(f: FeatureDef): string {
 
 const ANCHOR_OVERRIDES: Record<string, Record<number, Point>> = {
   'city-1-road-straight': { 2: { x: 50, y: 38 } },
-  'city-1-junction': { 4: { x: 22, y: 38 } },
+  'city-1-junction': { 4: { x: 34, y: 35 } },
   'city-3-road': { 2: { x: 22, y: 86 }, 3: { x: 78, y: 86 } },
   'city-3-road-banner': { 2: { x: 22, y: 86 }, 3: { x: 78, y: 86 } },
   'city-2-corner-road': { 3: { x: 88, y: 18 } },

@@ -38,6 +38,7 @@ The server has two layers:
   - If no admin is connected for 2 minutes, admin passes to the player who has been connected longest (D-026).
   - Admins see **Start game**, **Game options** and **Make this the shared screen**. They can also lock the room, remove participants, set the absence policy (D-010), open spectating and control screens.
 - **Lobby approval.** An optional room setting (D-020): admins approve each person before they join.
+- **Game picker.** In the lobby, admins choose the game and its options. Each game package exports its metadata: name, player range and options (`GameMeta` in the engine). Start game checks the player count against the chosen game's range.
 - **Screen commands.** Admins control each screen's **layout**, and each game defines which layouts it offers (D-020). Layout changes what a screen shows, not the game, so screen commands don't go through the rules or the action log.
 - **Seat token.** Every participant gets a random secret, stored in the browser, so they get the same seat and role back when they reconnect after their phone sleeps.
 

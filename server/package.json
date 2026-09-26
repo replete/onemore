@@ -14,7 +14,8 @@
   "dependencies": {
     "@onemore/engine": "workspace:*",
     "@onemore/twenty-one": "workspace:*",
-    "colyseus": "^0.18.8"
+    "colyseus": "^0.18.8",
+    "@onemore/carcass-eon": "workspace:*"
   },
   "devDependencies": {
     "@colyseus/sdk": "^0.18.4",

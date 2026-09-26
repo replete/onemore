@@ -10,7 +10,9 @@
   let players = $derived(room.participants.filter((p) => p.role === 'player'));
   let screens = $derived(room.participants.filter((p) => p.role === 'screen'));
   let named = $state('');
-  let canStart = $derived(players.length >= 1 && players.length <= room.maxSeats);
+  let game = $derived(room.games.find((g) => g.id === room.game)!);
+  let canStart = $derived(players.length >= game.minSeats && players.length <= game.maxSeats);
+  const seatsLabel = (min: number, max: number) => (min === max ? `${min} players` : `${min}–${max} players`);
 </script>
 
 {#if you.role === 'screen'}
@@ -18,7 +20,8 @@
   <main class="screen">
     <section class="join">
       <h1>One More</h1>
-      <p class="game">21</p>
+      <p class="game">{game.name}</p>
+      <p class="muted">{game.blurb} · {seatsLabel(game.minSeats, game.maxSeats)}</p>
       <Qr text={joinUrl(room.code)} label="Scan to join" />
       <p class="code big">{room.code}</p>
     </section>
@@ -37,7 +40,28 @@
         {/each}
       </ul>
       {#if you.admin}
-        <button onclick={() => session.admin({ type: 'start' })} disabled={!canStart}>Start game</button>
+        <div class="screen-games">
+          {#each room.games as g (g.id)}
+            <button
+              class="small"
+              class:secondary={g.id !== room.game}
+              onclick={() => session.admin({ type: 'set-game', game: g.id })}>{g.name}</button
+            >
+          {/each}
+        </div>
+        {#each game.options as option (option.id)}
+          <label class="option">
+            <input
+              type="checkbox"
+              checked={room.options[option.id]}
+              onchange={(e) => session.admin({ type: 'set-option', option: option.id, value: e.currentTarget.checked })}
+            />
+            <span><strong>{option.label}</strong></span>
+          </label>
+        {/each}
+        <button onclick={() => session.admin({ type: 'start' })} disabled={!canStart}>
+          {canStart ? 'Start game' : `Start game (${seatsLabel(game.minSeats, game.maxSeats)})`}
+        </button>
       {/if}
       {#if room.adminCode}
         <div class="admin-qr">
@@ -69,9 +93,46 @@
       <p class="hello">You're in, {you.name}. Waiting for the game to start…</p>
     {/if}
 
+    <section class="game-choice">
+      <h2>Game</h2>
+      {#if you.admin}
+        <div class="games">
+          {#each room.games as g (g.id)}
+            <button
+              class="game-card"
+              class:chosen={g.id === room.game}
+              aria-pressed={g.id === room.game}
+              onclick={() => session.admin({ type: 'set-game', game: g.id })}
+            >
+              <strong>{g.name}</strong>
+              <span>{g.blurb}</span>
+              <small>{seatsLabel(g.minSeats, g.maxSeats)}</small>
+            </button>
+          {/each}
+        </div>
+        {#each game.options as option (option.id)}
+          <label class="option">
+            <input
+              type="checkbox"
+              checked={room.options[option.id]}
+              onchange={(e) => session.admin({ type: 'set-option', option: option.id, value: e.currentTarget.checked })}
+            />
+            <span><strong>{option.label}</strong>{#if option.description}<br /><small>{option.description}</small>{/if}</span>
+          </label>
+        {/each}
+      {:else}
+        <p><strong>{game.name}</strong> · {seatsLabel(game.minSeats, game.maxSeats)}</p>
+        {#each game.options as option (option.id)}
+          <p class="muted">{option.label}: {room.options[option.id] ? 'on' : 'off'}</p>
+        {/each}
+      {/if}
+    </section>
+
     {#if you.admin}
       <div class="actions">
-        <button onclick={() => session.admin({ type: 'start' })} disabled={!canStart}>Start game</button>
+        <button onclick={() => session.admin({ type: 'start' })} disabled={!canStart}>
+          {canStart ? 'Start game' : `Start game (${seatsLabel(game.minSeats, game.maxSeats)})`}
+        </button>
         <button class="secondary" onclick={() => session.admin({ type: 'make-screen' })}>
           Make this the shared screen
         </button>
@@ -166,11 +227,57 @@
     display: grid;
     gap: 0.4rem;
   }
+  .screen-games {
+    display: flex;
+    gap: 0.4rem;
+    flex-wrap: wrap;
+  }
   .admin-qr {
     max-width: 11rem;
     margin-top: 2rem;
   }
   .muted {
+    color: var(--muted);
+  }
+  .game-choice {
+    display: grid;
+    gap: 0.6rem;
+  }
+  .game-choice p {
+    margin: 0;
+  }
+  .games {
+    display: grid;
+    gap: 0.5rem;
+  }
+  .game-card {
+    display: grid;
+    gap: 0.2rem;
+    text-align: left;
+    background: var(--panel);
+    color: var(--ink);
+    font-weight: 400;
+    border: 0.15rem solid transparent;
+  }
+  .game-card.chosen {
+    border-color: var(--accent);
+  }
+  .game-card small {
+    color: var(--muted);
+  }
+  .option {
+    display: flex;
+    gap: 0.6rem;
+    align-items: flex-start;
+    background: var(--panel);
+    border-radius: 0.6rem;
+    padding: 0.6rem 0.75rem;
+  }
+  .option input {
+    width: auto;
+    margin-top: 0.2rem;
+  }
+  .option small {
     color: var(--muted);
   }
   .away {

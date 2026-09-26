@@ -1,5 +1,6 @@
 <script lang="ts">
   import Lobby from './Lobby.svelte';
+  import CarcassEon from './games/carcass/CarcassEon.svelte';
   import TwentyOne from './games/TwentyOne.svelte';
   import { keepAwake, type Session } from './lib/session.svelte';
 
@@ -50,6 +51,8 @@
 {#if session.room}
   {#if session.room.phase === 'lobby'}
     <Lobby {session} />
+  {:else if session.room.game === 'carcass-eon'}
+    <CarcassEon {session} />
   {:else}
     <TwentyOne {session} />
   {/if}

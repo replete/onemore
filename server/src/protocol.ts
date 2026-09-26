@@ -1,7 +1,7 @@
 // Messages between the room server and clients (architecture §1, protocol sketch).
 // Carried as Colyseus room messages; imported by the client as types only.
 
-import type { Answer, SeatDecision, SeatId } from '@onemore/engine';
+import type { Answer, GameMeta, SeatDecision, SeatId } from '@onemore/engine';
 
 export type Role = 'player' | 'screen';
 export type Phase = 'lobby' | 'playing';
@@ -25,8 +25,12 @@ export interface ParticipantInfo {
 export interface RoomMessage {
   code: string;
   phase: Phase;
+  /** The chosen game's id. */
   game: string;
-  maxSeats: number;
+  /** Every game this server offers, for the lobby's picker. */
+  games: GameMeta[];
+  /** The chosen game's option values. */
+  options: Record<string, boolean>;
   you: ParticipantInfo;
   participants: ParticipantInfo[];
   /** Only for admins and screens, and only before the game starts (D-020). */
@@ -52,6 +56,8 @@ export interface ActMessage {
 export type AdminCommand =
   | { type: 'start' }
   | { type: 'new-game' }
+  | { type: 'set-game'; game: string }
+  | { type: 'set-option'; option: string; value: boolean }
   | { type: 'make-screen'; participant?: string }
   | { type: 'make-player'; participant: string }
   | { type: 'make-admin'; participant: string }

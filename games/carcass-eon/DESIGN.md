@@ -162,6 +162,8 @@ Which fields touch which cities is derived from the slots: a field touches a cit
 
 ## Build plan
 
+Status: steps 1–4 are done. Next are the WaveSpeed art trial and playing it on the TV.
+
 1. Tile data for all 24 types, with a procedural SVG renderer and a contact sheet to check every tile and rotation by eye.
 2. Unit tests:
    - edge matching and legal placements;
