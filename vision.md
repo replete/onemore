@@ -11,9 +11,11 @@ With One More, someone puts it on the TV, everyone scans the QR code with their 
 ## The experience
 
 - **The table.** A shared screen (TV, tablet or laptop) shows what's on the table: the board, the discard pile, scores, whose turn it is. It never shows anything secret.
-- **Your hand.** Each player's phone is their private view, with their hand and their choices. They join with a short room code or QR code in a plain web browser. No app, no install, no account.
-- **The server runs the game.** It holds the real state, shuffles, deals, enforces the rules, and tells each screen only what that screen is allowed to see.
-- **Same room first.** Remote play comes later. The architecture shouldn't care where players are sitting.
+- **Your hand.** Each player's phone is their private view, with their hand and their choices. They join in a plain web browser by scanning the QR code or typing a room code like `abc-def-ghi`. No app, no install, no account.
+- **Any device can be a screen.** Opening the room link on another device lets it join as an extra view-only screen.
+- **Someone runs the room.** Whoever starts the game is its admin and can make others admins too. Admins choose the game and options, control the screens, and decide what happens when someone drops out.
+- **The server runs the game.** It holds the real state, shuffles, deals, enforces the rules, and tells each device only what that device is allowed to see.
+- **Same room first.** Remote play comes later. The architecture shouldn't care where players are sitting. If an admin allows it, anyone with a spectator link can watch from anywhere.
 
 Playing should feel physical. You drag a card up to play it, or onto a target, and you can see where it's allowed to go. The phone only offers moves the rules allow.
 
@@ -55,6 +57,7 @@ Each family reuses the layers below it and adds its own. A deck of cards is cont
 
 - Other people building card sets, decks and house-rule variants.
 - Remote players joining a same-room game.
+- An interactive tablet mode: a screen in the middle of the table that players can also touch.
 - Bots to fill empty seats or replace players who leave.
 
 ## Prior art
