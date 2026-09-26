@@ -31,13 +31,13 @@ The server has two layers:
 - **Participants** (D-009, D-020):
   - **Player:** anyone who joins through the room link. Takes a seat and gets a private view on their phone.
   - **Screen:** a view-only device (TV, tablet or laptop) showing the public table. Admins choose which devices are screens: an admin can make their own device the shared screen ("Make this the shared screen"), or turn any connected client into one. A room can have several. An interactive tablet mode, where players can also touch the screen, comes later.
-  - **Spectator:** watches the public view from anywhere through a separate spectator link, if an admin has opened one.
+  - **Spectator** (planned): watches the public view from anywhere through a separate spectator link, if an admin has opened one.
 - **Admin** is a flag on a participant, not a separate role (D-020):
   - The creator starts as admin, and admins can make others admins.
   - A separate **admin QR code** joins whoever scans it as an admin. The shared screen shows it on the join screen before the game starts, and that's how a TV that created a room hands control to a phone. During the game, admins are marked on every screen.
   - If no admin is connected for 2 minutes, admin passes to the player who has been connected longest (D-026).
   - Admins see **Start game**, **Game options** and **Make this the shared screen**. They can also lock the room, remove participants, set the absence policy (D-010), open spectating and control screens.
-- **Lobby approval.** An optional room setting (D-020): admins approve each person before they join.
+- **Lobby approval** (planned). An optional room setting (D-020): admins approve each person before they join.
 - **Game picker.** In the lobby, admins choose the game and its options. Each game package exports its metadata: name, player range and options (`GameMeta` in the engine). Start game checks the player count against the chosen game's range.
 - **Screen commands.** Admins control each screen's **layout**, and each game defines which layouts it offers (D-020). Layout changes what a screen shows, not the game, so screen commands don't go through the rules or the action log.
 - **Seat token.** Every participant gets a random secret, stored in the browser, so they get the same seat and role back when they reconnect after their phone sleeps.
@@ -69,29 +69,27 @@ That's the whole game loop. When a timer expires, it enters the same loop as a s
 - **Rules module.** The game logic (e.g. `twenty-one`), written as pure code against the engine contract (§3.1).
 - **Content pack.** Data: card definitions, deck lists, tiles, boards and art, versioned by content hash. A room pins exact rules and content versions when it's created. Clients fetch assets by hash, so assets can be cached forever.
 
-### Protocol sketch
+### Protocol (as built)
 
-Messages travel as Colyseus room messages (MessagePack over WebSocket), and every message has a `type`. Colyseus handles joining and reconnection itself (`joinById`, reconnection tokens), so `hello` and `welcome` below are conceptual.
+Messages travel as Colyseus room messages (MessagePack over WebSocket). The types live in [server/src/protocol.ts](server/src/protocol.ts). Colyseus handles joining and reconnection itself: `create` or `joinById` with `{ name?, adminCode? }`, and `reconnect(token)`.
 
 - Client → server:
-  - `hello {room, seatToken?, protocol}`
-  - `join {name?, adminCode?, spectatorCode?}`
-  - `act {rev, decision, action}`
-  - `admin {command}`
-  - `ping {clientTime}`
+  - `act {decision, answer}`: an answer to one of your pending decisions.
+  - `admin {type, …}`: `start`, `new-game`, `set-game`, `set-option`, `make-screen`, `make-player`, `make-admin`, `remove`, `skip`, `screen-layout`, `approve-claim`, `deny-claim`.
+  - `name {name}`: set your name in the lobby.
+  - `claim {participant}`: "Are you Sam?", asking for a disconnected player's seat.
+  - `ping {t}`: clock sync and heartbeat (D-033).
 - Server → client:
-  - `welcome {participant, seatToken, role, game, versions}`
-  - `view {rev, view, decisions, events, deadlines}`
-  - `rejected {reason}`
-  - `room {participants, status}`
-  - `screen {command}`
-  - `pong {clientTime, serverTime}`
+  - `room`: code, phase, the chosen game, the game catalogue, options, you, participants. Admins also get the admin code (lobby only) and any seat claims.
+  - `view`: `rev`, the view, your decisions, events for you, the absent players being waited on (with deadlines), and server time.
+  - `error {message}`.
+  - `pong {t, server}`.
 
 How the fields work:
 
-- `rev` goes up by one with each applied action. Clients send the `rev` they acted on, and the server rejects stale actions rather than guessing what was meant.
-- `deadlines` are absolute server times. `ping` and `pong` let each client estimate its clock offset, so countdowns match on every device (D-013).
-- To start with, the server pushes the full view every time. We'll move to diffs only if we need to.
+- `rev` goes up by one with each applied action. An answer is accepted only while its decision is still open, so stale answers are rejected rather than guessed at.
+- `waiting[].until` deadlines are absolute server times. Clients correct them with the offset from `ping`/`pong`, so countdowns match on every device (D-033).
+- The server pushes the full view every time. We'll move to diffs only if we need to.
 
 ## 2. Trust and security
 
@@ -104,7 +102,7 @@ The client is untrusted. Assume anyone can open dev tools, edit the JavaScript o
 | Tracking or decoding hidden cards by their ids | Views give hidden components opaque ids, which change when a component is shuffled or moves while hidden (§3.3). |
 | Rigging or predicting shuffles | Randomness only happens on the server. Seeds come from a secure random source and never leave the server, because anyone who knew the seed could predict every shuffle. |
 | Acting as another player | Seat tokens. Actions are only accepted from that seat's own connection. |
-| Joining a room uninvited | Meet-style codes have about 3 × 10^11 combinations, so they can't be guessed. Code lookups are rate-limited per IP address anyway, which is what stopped Jackbox's codes being brute-forced (research 03). Admins can lock the room, remove participants, or turn on lobby approval. |
+| Joining a room uninvited | Meet-style codes have about 3 × 10^11 combinations, so they can't be guessed. Code lookups will be rate-limited per IP address anyway (not built yet; see tasks), which is what stopped Jackbox's codes being brute-forced (research 03). Admins can remove participants. Locking the room and lobby approval are planned. |
 | Offensive names or codes | Names have a length limit, and admins can remove players. There's no profanity filter for names (D-029). Codes contain no vowels, and a blocklist catches anything left. |
 | Becoming an admin uninvited | The admin QR code carries a separate code from the room. It's only shown on the shared screen's join screen before the game starts. During the game, admins are marked, so everyone can see who they are. |
 | Spectators taking seats | The spectator link uses a different code from the room. |
@@ -254,6 +252,8 @@ On the phone, that looks like this:
 - A gesture with no target, like flicking a card up to play it, sends the single "play this card" choice if there is exactly one.
 - A card with no choices can't be dragged. Illegal moves don't get rejected; the UI gives you no way to make them.
 - Out-of-turn plays work the same way. During a response window, a phone whose player isn't active simply has a prompt.
+
+**As built** for Carcass Eon's `place` prompt (D-041): the drawn tile sits in a hand beside the stack. You tap it to rotate, and drag it onto the map to place it. The board maps the drop point to a square (`cellAt`), and the client checks it against the prompt's sites before sending, so a tile that doesn't fit bounces back without a round trip. The server validates again either way. Placement hints (flashing squares) are a game option.
 
 **Big choice spaces** (D-018). Small sets of choices are listed in full. Big ones are handled in one of two ways, both of which research 01 found in use (TAG, Dominion AIs, RLCard):
 

@@ -28,9 +28,10 @@
     if (drawDecision) session.act(drawDecision.id, { option: 'draw' });
   }
 
-  // --- Placing a tile ----------------------------------------------------------------
+  // --- Placing a tile (D-040) ---------------------------------------------------------
+  // Tap the tile in your hand to rotate it; drag it onto the map (or tap a flashing
+  // square) and it's placed straight away. A tile that doesn't fit bounces back.
   let rotation = $state(0);
-  let chosenCell = $state<{ x: number; y: number } | null>(null);
 
   let sitesByRotation = $derived.by(() => {
     const out = new Map<number, { x: number; y: number }[]>();
@@ -41,15 +42,13 @@
     }
     return out;
   });
-  const validAt = (x: number, y: number) =>
-    [0, 1, 2, 3].filter((r) => sitesByRotation.get(r)?.some((c) => c.x === x && c.y === y));
+  const fits = (x: number, y: number, r: number) => sitesByRotation.get(r)?.some((c) => c.x === x && c.y === y) ?? false;
 
-  // A new placement decision: start from the first rotation that fits somewhere.
+  // A new tile in hand: start from a rotation that fits somewhere (with hints on).
   $effect(() => {
     const id = placeDecision?.id;
     untrack(() => {
-      chosenCell = null;
-      if (id) rotation = [0, 1, 2, 3].find((r) => sitesByRotation.has(r)) ?? 0;
+      if (id) rotation = hints ? ([0, 1, 2, 3].find((r) => sitesByRotation.has(r)) ?? 0) : 0;
     });
   });
 
@@ -67,59 +66,36 @@
     return [...out.values()];
   });
 
-  // With hints on, flashing squares show where the tile fits; with them off, every edge square is a target (D-040).
+  // With hints on, flashing squares show where the tile fits this way round; with them off, every edge square is a target.
   let ghosts = $derived(placeDecision && hints ? (sitesByRotation.get(rotation) ?? []) : []);
   let targets = $derived(placeDecision && !hints ? frontier : []);
   let hover = $state<{ x: number; y: number } | null>(null);
-  let shown = $derived(hover ?? chosenCell);
-  let preview = $derived(shown && view?.current ? { ...shown, def: view.current, rotation } : null);
-  let previewState = $derived(!hints || !shown ? null : validAt(shown.x, shown.y).includes(rotation) ? ('ok' as const) : ('bad' as const));
-  let problem = $state('');
-  let shake = $state(0);
+  let preview = $derived(hover && view?.current ? { ...hover, def: view.current, rotation } : null);
+  let previewState = $derived(!hints || !hover ? null : fits(hover.x, hover.y, rotation) ? ('ok' as const) : ('bad' as const));
+  let refused = $state(0);
 
   function rotate() {
-    problem = '';
     if (!hints) {
       rotation = (rotation + 1) % 4;
       return;
     }
     for (let i = 1; i <= 4; i++) {
       const r = (rotation + i) % 4;
-      const fitsAtChosen = chosenCell ? validAt(chosenCell.x, chosenCell.y).includes(r) : sitesByRotation.has(r);
-      if (fitsAtChosen) {
+      if (sitesByRotation.has(r)) {
         rotation = r;
         return;
       }
     }
   }
 
-  /** Put the tile on a square (tap or drop). With hints on, turn it to a way round that fits. */
-  function chooseCell(x: number, y: number) {
-    problem = '';
-    if (chosenCell && chosenCell.x === x && chosenCell.y === y) return rotate();
-    if (hints) {
-      const valid = validAt(x, y);
-      if (valid.length === 0) return refuse('Doesn’t fit there');
-      if (!valid.includes(rotation)) rotation = valid[0]!;
-    } else if (!frontier.some((c) => c.x === x && c.y === y)) {
-      return refuse('It has to touch the map');
+  /** Place the tile on (x, y) as it's turned now, or bounce it back if it doesn't fit. */
+  function place(x: number, y: number) {
+    if (!placeDecision) return;
+    if (!fits(x, y, rotation)) {
+      refused += 1;
+      return;
     }
-    chosenCell = { x, y };
-  }
-
-  function refuse(message: string) {
-    problem = message;
-    shake += 1;
-  }
-
-  function confirmPlace() {
-    if (!placeDecision || !chosenCell) return;
-    const site = `${chosenCell.x},${chosenCell.y},${rotation}`;
-    if (placeDecision.prompt.kind === 'place' && !placeDecision.prompt.sites.includes(site)) {
-      return refuse(validAt(chosenCell.x, chosenCell.y).length ? 'Doesn’t fit this way round' : 'Doesn’t fit there');
-    }
-    session.act(placeDecision.id, { site });
-    chosenCell = null;
+    session.act(placeDecision.id, { site: `${x},${y},${rotation}` });
   }
 
   // --- Dragging the tile from your hand onto the map -----------------------------------
@@ -147,12 +123,11 @@
 
   function handUp(e: PointerEvent) {
     const wasDrag = drag !== null;
-    pressStart = null;
-    drag = null;
-    hover = null;
+    handCancel();
     if (!wasDrag) return rotate();
     const cell = board?.cellAt(e.clientX, e.clientY);
-    if (cell) chooseCell(cell.x, cell.y);
+    if (cell && frontier.some((c) => c.x === cell.x && c.y === cell.y)) place(cell.x, cell.y);
+    else if (cell) refused += 1;
   }
 
   // --- Placing a follower ------------------------------------------------------------
@@ -314,7 +289,7 @@
         focus={layout === 'follow' && recentTile ? { x: recentTile.x, y: recentTile.y } : null}
         focusRadius={2}
       />
-      {#if view.phase !== 'done'}<Stack count={view.bag} />{/if}
+      {#if view.phase !== 'done'}<Stack count={view.bag} active={view.phase === 'draw'} />{/if}
       {@render announcements()}
     </div>
     <aside>
@@ -364,11 +339,28 @@
         {hotspots}
         selected={chosenSpot}
         focus={followDecision && lastTile ? { x: lastTile.x, y: lastTile.y } : null}
-        onGhost={chooseCell}
+        onGhost={place}
         onHotspot={(id) => (chosenSpot = id)}
         bind:this={board}
       />
       {#if view.phase !== 'done'}<Stack count={view.bag} active={!!drawDecision} onDraw={draw} />{/if}
+      {#if placeDecision && view.current}
+        <!-- Your hand, beside the stack: the tile slides here when you draw it. -->
+        {#key view.current + view.bag}
+          <button
+            class="hand"
+            class:dragging={!!drag}
+            aria-label="Your tile: tap to rotate, drag onto the map"
+            onpointerdown={handDown}
+            onpointermove={handMove}
+            onpointerup={handUp}
+            onpointercancel={handCancel}
+          >
+            {#key refused}<img class:bounce={refused > 0} src={tileUri(view.current, rotation)} alt="Your tile" draggable="false" />{/key}
+            <span class="turn-badge">↻</span>
+          </button>
+        {/key}
+      {/if}
       {@render announcements()}
     </div>
 
@@ -381,40 +373,8 @@
           {/each}
         </ol>
         {@render finalBreakdown()}
-      {:else if drawDecision}
-        <div class="draw-prompt">
-          <p><strong>Your turn.</strong> Take a tile from the stack ↙</p>
-          <button onclick={draw}>Draw</button>
-        </div>
-      {:else if placeDecision && view.current}
-        <div class="place">
-          {#key view.current + view.bag}
-            <button
-              class="tile-button fly-in"
-              class:dragging={!!drag}
-              aria-label="Your tile: tap to rotate, drag onto the map"
-              onpointerdown={handDown}
-              onpointermove={handMove}
-              onpointerup={handUp}
-              onpointercancel={handCancel}
-            >
-              {#key shake}<img class:shake={shake > 0} src={tileUri(view.current, rotation)} alt="Your tile" draggable="false" />{/key}
-              <span>↻</span>
-            </button>
-          {/key}
-          <div class="place-actions">
-            {#if problem}
-              <p class="hint problem">{problem}</p>
-            {:else if hints && ghosts.length === 0}
-              <p class="hint">No spot fits this way round. Tap the tile to rotate.</p>
-            {:else if !chosenCell}
-              <p class="hint">Drag your tile onto the map{hints ? ' (flashing squares fit)' : ''}. Tap it to rotate.</p>
-            {:else}
-              <p class="hint">Tap the tile or the square to rotate.</p>
-            {/if}
-            <button onclick={confirmPlace} disabled={!chosenCell}>Place tile</button>
-          </div>
-        </div>
+      {:else if drawDecision || placeDecision}
+        <p class="hint your-turn">Your turn</p>
       {:else if followDecision}
         <p class="hint">
           {#if hotspots.length === 0}No free spot here.{:else if chosenLabel}Put a follower on the <strong>{chosenLabel.toLowerCase()}</strong>?{:else}Tap a circle to place a follower ({view.supply[you.seat!]} left).{/if}
@@ -613,42 +573,6 @@
   .panel h2 {
     margin: 0;
   }
-  .place {
-    display: grid;
-    grid-template-columns: auto 1fr;
-    gap: 0.75rem;
-    align-items: center;
-  }
-  .tile-button {
-    position: relative;
-    padding: 0;
-    background: none;
-    border-radius: 0.4rem;
-  }
-  .tile-button img {
-    width: 6.5rem;
-    height: 6.5rem;
-    display: block;
-    border-radius: 0.3rem;
-    box-shadow: 0 0.2rem 0.8rem rgb(0 0 0 / 0.4);
-  }
-  .tile-button span {
-    position: absolute;
-    right: -0.4rem;
-    bottom: -0.4rem;
-    background: var(--accent);
-    color: #231a05;
-    border-radius: 50%;
-    width: 2rem;
-    height: 2rem;
-    display: grid;
-    place-items: center;
-    font-size: 1.2rem;
-  }
-  .place-actions {
-    display: grid;
-    gap: 0.5rem;
-  }
   .hint {
     margin: 0;
     color: var(--muted);
@@ -679,26 +603,68 @@
     margin: 0;
     font-size: 1.2rem;
   }
-  .draw-prompt {
-    display: flex;
-    gap: 0.75rem;
-    align-items: center;
-    justify-content: space-between;
-  }
-  .draw-prompt p {
-    margin: 0;
-  }
   .fly-in {
     animation: fly-in 0.5s cubic-bezier(0.2, 0.8, 0.3, 1.1);
   }
   @keyframes fly-in {
     from {
       opacity: 0;
-      transform: translate(-30vw, -18vh) scale(0.4) rotate(-20deg);
+      transform: translate(-6rem, 0) scale(0.6) rotate(-12deg);
     }
   }
-  .shake {
+  /* The hand: beside the stack in the map's bottom-left. The drawn tile slides off the stack into it. */
+  .hand {
+    position: absolute;
+    left: calc(0.75rem + 4.2rem + 1rem);
+    bottom: 0.75rem;
+    z-index: 3;
+    padding: 0;
+    background: none;
+    border-radius: 0.3rem;
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
+    animation: slide-off 0.55s cubic-bezier(0.2, 0.8, 0.3, 1.15);
+  }
+  .hand img {
+    width: 5.2rem;
+    height: 5.2rem;
+    display: block;
+    border-radius: 0.3rem;
+    box-shadow: 0 0.3rem 1rem rgb(0 0 0 / 0.5);
+    pointer-events: none;
+    -webkit-user-drag: none;
+  }
+  .hand.dragging {
+    opacity: 0.35;
+  }
+  .turn-badge {
+    position: absolute;
+    right: -0.45rem;
+    bottom: -0.45rem;
+    width: 1.8rem;
+    height: 1.8rem;
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+    background: var(--accent);
+    color: #231a05;
+    font-size: 1.05rem;
+    pointer-events: none;
+  }
+  @keyframes slide-off {
+    from {
+      transform: translate(-5.2rem, -1.4rem) rotate(-8deg) scale(0.8);
+    }
+  }
+  .bounce {
     animation: shake 0.4s;
+  }
+  .your-turn {
+    color: var(--accent);
+    font-weight: 800;
+    text-align: center;
   }
   @keyframes shake {
     20%,
@@ -709,22 +675,6 @@
     80% {
       transform: translateX(0.4rem);
     }
-  }
-  .problem {
-    color: #ffb3a8;
-  }
-  .tile-button {
-    touch-action: none;
-    user-select: none;
-    -webkit-user-select: none;
-    -webkit-touch-callout: none;
-  }
-  .tile-button img {
-    -webkit-user-drag: none;
-    pointer-events: none;
-  }
-  .tile-button.dragging {
-    opacity: 0.35;
   }
   .floating {
     position: fixed;

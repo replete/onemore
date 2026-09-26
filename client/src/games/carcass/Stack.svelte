@@ -1,39 +1,37 @@
 <script lang="ts">
   // The draw pile (D-040): its height shows how many tiles are left, so everyone can
-  // see the end coming. On your turn the top tile wiggles: tap it, or drag it up, to
-  // draw. Otherwise, tap it to see exactly how many are left.
+  // see the end coming. On your turn only the top tile wiggles; tap it to draw, and it
+  // slides off the stack into your hand beside it. Otherwise, tap it to see how many
+  // are left.
 
   let {
     count,
     total = 71,
     active = false,
     onDraw,
-  }: { count: number; total?: number; active?: boolean; onDraw?: () => void } = $props();
+  }: {
+    count: number;
+    total?: number;
+    /** Someone's turn to draw: the top tile wiggles. */
+    active?: boolean;
+    /** Only on the phone whose turn it is: tapping the top tile draws it. */
+    onDraw?: () => void;
+  } = $props();
 
   let open = $state(false);
-  let start: { x: number; y: number } | null = null;
 
   // One layer per 6 tiles, and one per tile once it's nearly empty.
   let layers = $derived(count <= 8 ? count : Math.min(12, Math.ceil(count / 6)));
   let nearlyDone = $derived(count > 0 && count <= 10);
 
-  function down(e: PointerEvent) {
-    start = { x: e.clientX, y: e.clientY };
-  }
-
-  function up(e: PointerEvent) {
-    const moved = start ? Math.hypot(e.clientX - start.x, e.clientY - start.y) : 0;
-    start = null;
-    if (active) {
-      onDraw?.();
-      return;
-    }
-    if (moved < 8) open = !open;
+  function tap() {
+    if (active && onDraw) onDraw();
+    else open = !open;
   }
 </script>
 
 <div class="stack-wrap">
-  {#if open && !active}
+  {#if open}
     <div class="panel" role="status">
       <strong>{count}</strong> of {total} tiles left
       <div class="backs">
@@ -44,19 +42,17 @@
 
   <button
     class="stack"
-    class:active
+    class:drawable={active && onDraw}
     class:nearly={nearlyDone}
-    aria-label={active ? 'Draw a tile' : `${count} tiles left`}
-    onpointerdown={down}
-    onpointerup={up}
+    aria-label={active && onDraw ? 'Draw a tile' : `${count} tiles left`}
+    onclick={tap}
     disabled={count === 0}
   >
     {#each Array.from({ length: layers }) as _, i (i)}
-      <span class="layer" style="--i: {i}"></span>
+      <span class="layer" class:top={i === layers - 1} class:wiggle={active && i === layers - 1} style="--i: {i}"></span>
     {/each}
     <span class="count">{count}</span>
   </button>
-  {#if active}<span class="hint">Draw!</span>{/if}
 </div>
 
 <style>
@@ -76,7 +72,6 @@
     padding: 0;
     background: none;
     border-radius: 0.3rem;
-    touch-action: none;
   }
   .layer {
     position: absolute;
@@ -88,6 +83,14 @@
     background: repeating-linear-gradient(45deg, #5b3b22 0 0.35rem, #6b4629 0.35rem 0.7rem);
     border: 0.12rem solid #f0e2c4;
     box-shadow: 0 0.1rem 0.25rem rgb(0 0 0 / 0.45);
+  }
+  .layer.wiggle {
+    border-color: var(--accent);
+    box-shadow: 0 0 0.9rem var(--accent);
+    animation: wiggle 1.2s ease-in-out infinite;
+  }
+  .drawable {
+    cursor: pointer;
   }
   .count {
     position: absolute;
@@ -103,19 +106,6 @@
   }
   .nearly .count {
     background: var(--danger);
-  }
-  .active {
-    cursor: pointer;
-    animation: wiggle 1.2s ease-in-out infinite;
-  }
-  .active .layer:last-of-type {
-    border-color: var(--accent);
-    box-shadow: 0 0 0.9rem var(--accent);
-  }
-  .hint {
-    font-weight: 800;
-    color: var(--accent);
-    text-shadow: 0 0.1rem 0.3rem rgb(0 0 0 / 0.6);
   }
   .panel {
     background: rgb(0 0 0 / 0.8);
@@ -143,10 +133,10 @@
       transform: rotate(0);
     }
     15% {
-      transform: rotate(-4deg) translateY(-0.15rem);
+      transform: rotate(-5deg) translateY(-0.25rem);
     }
     30% {
-      transform: rotate(4deg) translateY(-0.15rem);
+      transform: rotate(5deg) translateY(-0.25rem);
     }
     45% {
       transform: rotate(0);

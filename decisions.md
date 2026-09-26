@@ -13,6 +13,7 @@ Things we still need to decide. Each one becomes a D-entry once it's decided.
 - Fixed-pace response windows? (D-037, proposed)
 - The card game order after Carcass Eon. (D-036, proposed)
 - Carcass Eon art: textures in procedural shapes, or whole-tile illustrations? Decide after the WaveSpeed trial. (D-038)
+
 ---
 
 ## D-001 Root working documents
@@ -676,7 +677,7 @@ Turn off its state sync (no `@colyseus/schema` or `StateView`), and send each vi
 
 ## D-040 Carcass Eon: drawing, the stack and placement hints
 
-**Status:** Accepted, 2026-09-26. From your feedback while watching a live session.
+**Status:** Accepted, 2026-09-26. From your feedback while watching a live session. The confirm step and hand position are superseded by D-041.
 
 **Decision:**
 
@@ -686,4 +687,20 @@ Turn off its state sync (no `@colyseus/schema` or `StateView`), and send each vi
 - **Placement hints are optional.** A game option, **Show where tiles fit**, is on by default. With it off, nothing is highlighted, and a tile that doesn't fit is refused when you confirm ("Doesn't fit there"). The server always checks the placement either way.
 
 **Consequences:** A turn is three steps: draw, place, then an optional follower. The hints are only a display choice, because where a tile fits can always be worked out from public information.
+
+## D-041 Carcass Eon: drop to place
+
+**Status:** Accepted, 2026-09-26. From your feedback on a live session. Supersedes D-040's confirm step.
+
+**Decision:**
+
+- **Only the top tile of the stack wiggles** on your turn. Tapping it slides it off the stack into your **hand**, which sits right next to the stack in the map's bottom-left. The TV's stack top wiggles while anyone is drawing.
+- **Dropping places the tile.** There's no **Place tile** button and no instruction text:
+  - tap the tile in your hand to rotate it;
+  - drag it onto the map, or tap a flashing square, and it's placed at once;
+  - with hints on, the square under your finger is outlined green or red while you drag;
+  - a tile that doesn't fit bounces back with a shake.
+- The phone's bottom panel just says "Your turn" while you draw and place.
+
+**Consequences:** There's no undo, so a mistaken drop stands. If playtesting shows mis-drops, add a short undo before the follower step (the log and replay make that cheap, D-007).
 

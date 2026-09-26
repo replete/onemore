@@ -125,18 +125,28 @@ Which fields touch which cities is derived from the slots: a field touches a cit
 
 ## Screens
 
+The screens as built (D-040, D-041).
+
 **Shared screen**
-- The map, drawn in SVG, scaled to fit and panned smoothly as it grows. The last placed tile is highlighted.
-- Scores, followers left, the bag count, the current tile and whose turn it is.
+- The map, drawn in SVG from the procedural tiles, fitted to the screen and gliding as it grows. The last tile placed is outlined, followers stand, and farmers lie in their fields.
+- **The stack** sits in the map's bottom-left. Its height shows how many tiles are left, its count turns red for the last 10, and its top tile wiggles while someone is drawing.
+- The side panel shows:
+  - who is drawing, placing or choosing a follower;
+  - the tile in play;
+  - scores and followers left per player;
+  - tiles left, and whether Farmers is on;
+  - the admin's layout switch.
+- Scoring is announced ("Sam +8 · city") while the scored feature flashes. At the end come the final scores, with a breakdown of the last points.
 - Screen layouts (D-020): **Whole map**, or **Follow the action** (zoomed around the last placement).
 
 **Phone, on your turn**
-1. Your tile, large, with a rotate button.
-2. The map, zoomable, with legal squares for the current rotation shown as ghosts. Tap one to preview.
-3. Confirm.
-4. Then choose a follower spot: the tile shows tappable hotspots on its free features, plus "No follower".
+1. **Draw:** the top tile of your stack wiggles. Tap it and the tile slides off into your **hand**, beside the stack.
+2. **Place:** tap the tile in your hand to rotate it. Then drag it onto the map, or tap a flashing square, and it's placed at once, with no confirm step.
+   - With **Show where tiles fit** on (the default), squares where it fits this way round flash, and the square under your finger is outlined green or red while you drag.
+   - With it off, nothing is highlighted, and a tile that doesn't fit bounces back.
+3. **Follow:** the map zooms in on your tile and shows circles on free features. Tap one and press **Place follower**, or press **No follower**.
 
-**Phone, otherwise:** the map (zoomable), scores, and your followers.
+**Phone, otherwise:** the map (drag, pinch or scroll to look around; **Fit map** resets it), a compact scoreboard, and what the current player is doing. Tap the stack to see how many tiles are left.
 
 ## Art plan
 
@@ -162,7 +172,7 @@ Which fields touch which cities is derived from the slots: a field touches a cit
 
 ## Build plan
 
-Status: steps 1–4 are done. Next are the WaveSpeed art trial and playing it on the TV.
+Status: steps 1–4 are done, and the game is playable end to end. What's left is playing it on a real TV, and the art trial, which comes last.
 
 1. Tile data for all 24 types, with a procedural SVG renderer and a contact sheet to check every tile and rotation by eye.
 2. Unit tests:
