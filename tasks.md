@@ -11,8 +11,8 @@
   - [x] the rules module, with random games, leak tests and replay;
   - [x] the server picks the game: a game choice in the lobby, options such as Farmers, and seat limits per game;
   - [x] the board component (pan, pinch and scroll zoom, auto-fit) and the placement and follower interactions;
-  - [ ] show what just scored (e.g. "Sam +8: city"), and a short animation when a tile lands;
-  - [ ] screen layouts: Whole map, or Follow the action (D-020);
+  - [x] show what just scored ("Sam +8 · city"), flash the scored feature, animate a tile landing, and break down the final scoring;
+  - [x] screen layouts: Whole map, or Follow the action (D-020);
   - [ ] the WaveSpeed art trial, then your feedback (D-038).
 
 ## Next
@@ -30,7 +30,7 @@ Gaps left in the walking skeleton:
 
 Then:
 
-- [ ] Events and animation: deal, draw and flip, with events redacted per viewer (architecture §3.1).
+- [ ] 21: animate dealing and drawing using events (the event pipeline is done).
 - [ ] A standard 52-card deck content pack, plus a generic renderer for cards and zones.
 - [ ] Drag and drop on the phone, driven by prompts ([architecture §3.5](architecture.md#35-prompts-and-the-ui)).
 - [ ] 21: write the full rules and variations (research 02), then 21 v1 with the variations as options (D-021).
@@ -53,6 +53,7 @@ Then:
 
 ## Done
 
+- [x] 2026-09-26 Game events reach clients, filtered per viewer (`eventsFor`, `visibleTo`), and are covered by the leak tests. Carcass Eon announces scoring and supports screen layouts. A full 71-tile game was played in Chrome.
 - [x] 2026-09-26 Carcass Eon is playable: a game picker and options in the lobby (phone and shared screen), a board with pan and zoom, tile placement with preview and rotation, and follower spots. Tested end to end in Chrome with a TV and two phones.
 - [x] 2026-09-26 Carcass Eon scope decided (D-039): medieval theme, classic tiles, 2–5 players, Farmers on by default.
 - [x] 2026-09-26 Carcass Eon design (D-038): rules, tile set, engine mapping, screens and art plan. Turn timers made an optional game setting (D-034). `.env` added to `.gitignore`.

@@ -34,9 +34,11 @@
     ghosts = [],
     preview = null,
     highlight = null,
+    flash = [],
     hotspots = [],
     selected = null,
     focus = null,
+    focusRadius = 1,
     onGhost,
     onHotspot,
   }: {
@@ -45,9 +47,13 @@
     ghosts?: { x: number; y: number }[];
     preview?: { x: number; y: number; def: string; rotation: number } | null;
     highlight?: string | null;
+    /** Cells to flash briefly, e.g. a feature that just scored. */
+    flash?: string[];
     hotspots?: Hotspot[];
     selected?: string | null;
     focus?: { x: number; y: number } | null;
+    /** How many cells around `focus` to show. */
+    focusRadius?: number;
     onGhost?: (x: number, y: number) => void;
     onHotspot?: (id: string) => void;
   } = $props();
@@ -63,8 +69,8 @@
   const target = $derived.by((): Box => {
     const cells = focus
       ? [
-          { x: focus.x - 1, y: focus.y - 1 },
-          { x: focus.x + 1, y: focus.y + 1 },
+          { x: focus.x - focusRadius, y: focus.y - focusRadius },
+          { x: focus.x + focusRadius, y: focus.y + focusRadius },
         ]
       : [...tiles, ...ghosts, ...(preview ? [preview] : [])];
     const xs = cells.map((c) => c.x);
@@ -206,7 +212,19 @@
     aria-label="The map"
   >
     {#each tiles as t (t.cell)}
-      <image href={tileUri(t.def, t.rotation)} x={t.x * 100} y={t.y * 100} width="100" height="100" />
+      <image
+        class:landed={t.cell === highlight}
+        href={tileUri(t.def, t.rotation)}
+        x={t.x * 100}
+        y={t.y * 100}
+        width="100"
+        height="100"
+      />
+    {/each}
+
+    {#each flash as cell (cell)}
+      {@const f = byCell.get(cell)}
+      {#if f}<rect class="flash" x={f.x * 100} y={f.y * 100} width="100" height="100" />{/if}
     {/each}
 
     {#if highlight && byCell.get(highlight)}
@@ -295,6 +313,30 @@
     fill: none;
     stroke: var(--accent);
     stroke-width: 4;
+  }
+  .landed {
+    transform-box: fill-box;
+    transform-origin: center;
+    animation: land 0.45s cubic-bezier(0.2, 0.8, 0.3, 1.2);
+  }
+  .flash {
+    fill: #fff3b0;
+    pointer-events: none;
+    animation: flash 1.5s ease-out forwards;
+  }
+  @keyframes land {
+    from {
+      opacity: 0;
+      transform: scale(1.25);
+    }
+  }
+  @keyframes flash {
+    0% {
+      opacity: 0.75;
+    }
+    100% {
+      opacity: 0;
+    }
   }
   .ghost {
     fill: rgb(255 255 255 / 0.12);

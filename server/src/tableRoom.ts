@@ -7,9 +7,11 @@ import {
   autoAnswer,
   createMatch,
   decisionsFor,
+  eventsFor,
   headerOf,
   newSeed,
   submit,
+  type GameEvent,
   type GameModule,
   type MatchState,
   type SeatId,
@@ -52,6 +54,7 @@ interface Participant {
   autoplay: boolean;
   joinOrder: number;
   reconnection?: Deferred<Client>;
+  layout?: string;
 }
 
 type Game = GameModule<unknown>;
@@ -76,6 +79,8 @@ export class TableRoom extends Room {
   /** Grace timers for absent players, keyed by `${decision}|${seat}`. */
   private readonly grace = new Map<string, { timer: Delayed; until: number }>();
   private emptyTimer: Delayed | undefined;
+  /** Events from the actions applied since views were last sent. */
+  private pendingEvents: GameEvent[] = [];
   private noAdminSince: number | undefined;
 
   override onCreate(): void {
@@ -213,6 +218,15 @@ export class TableRoom extends Room {
         }
         return this.refreshAll();
       }
+      case 'screen-layout': {
+        const layouts = GAMES[this.gameId]!.meta.layouts ?? [];
+        if (!layouts.some((l) => l.id === cmd.layout)) return this.fail(client, 'No such layout.');
+        const screens = [...this.participants.values()].filter(
+          (q) => q.role === 'screen' && (!cmd.participant || q.id === cmd.participant),
+        );
+        for (const q of screens) q.layout = cmd.layout;
+        return this.refreshAll();
+      }
       case 'skip': {
         if (!this.match) return;
         const decision = this.game.decisions(this.match).find((d) => d.seats.length === 1 && d.seats[0] === cmd.seat);
@@ -259,6 +273,7 @@ export class TableRoom extends Room {
     if (!result.ok) return client ? this.fail(client, result.error) : undefined;
     this.match = result.state;
     this.log?.append(result.entry, result.state.rev);
+    this.pendingEvents.push(...result.events);
     this.settle();
     this.sendViews();
   }
@@ -273,6 +288,7 @@ export class TableRoom extends Room {
       if (!result.ok) break;
       this.match = result.state;
       this.log?.append(result.entry, result.state.rev);
+      this.pendingEvents.push(...result.events);
     }
 
     const needed = new Set<string>();
@@ -348,6 +364,8 @@ export class TableRoom extends Room {
     const match = this.match;
     if (!match || this.phase !== 'playing') return;
     const waiting = [...this.grace.entries()].map(([key, g]) => ({ seat: key.split('|')[1]!, until: g.until }));
+    const events = this.pendingEvents;
+    this.pendingEvents = [];
     for (const client of this.clients) {
       const p = this.participants.get(client.sessionId);
       if (!p) continue;
@@ -357,6 +375,7 @@ export class TableRoom extends Room {
         rev: match.rev,
         view: this.game.view(match, viewer),
         decisions: seat ? decisionsFor(this.game, match, seat) : [],
+        events: eventsFor(events, viewer),
         waiting,
         serverTime: Date.now(),
       };
@@ -415,6 +434,7 @@ export class TableRoom extends Room {
 function info(p: Participant): ParticipantInfo {
   const out: ParticipantInfo = { id: p.id, name: p.name, role: p.role, admin: p.admin, connected: p.connected };
   if (p.seat) out.seat = p.seat;
+  if (p.role === 'screen' && p.layout) out.layout = p.layout;
   return out;
 }
 

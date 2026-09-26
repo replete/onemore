@@ -1,7 +1,7 @@
 // Messages between the room server and clients (architecture §1, protocol sketch).
 // Carried as Colyseus room messages; imported by the client as types only.
 
-import type { Answer, GameMeta, SeatDecision, SeatId } from '@onemore/engine';
+import type { Answer, GameEvent, GameMeta, SeatDecision, SeatId } from '@onemore/engine';
 
 export type Role = 'player' | 'screen';
 export type Phase = 'lobby' | 'playing';
@@ -19,6 +19,8 @@ export interface ParticipantInfo {
   admin: boolean;
   seat?: SeatId;
   connected: boolean;
+  /** Screens only: the layout an admin chose for this screen (D-020). */
+  layout?: string;
 }
 
 /** Sent to each client whenever the room itself changes. */
@@ -43,6 +45,8 @@ export interface ViewMessage<V = unknown> {
   view: V;
   /** Only the decisions waiting on this client's seat. */
   decisions: SeatDecision[];
+  /** What just happened, filtered for this client. Empty on refreshes, so nothing is announced twice. */
+  events: GameEvent[];
   /** Absent players the game is waiting on, and when their grace period ends (server time, ms). */
   waiting: { seat: SeatId; until: number }[];
   serverTime: number;
@@ -62,7 +66,9 @@ export type AdminCommand =
   | { type: 'make-player'; participant: string }
   | { type: 'make-admin'; participant: string }
   | { type: 'remove'; participant: string }
-  | { type: 'skip'; seat: SeatId };
+  | { type: 'skip'; seat: SeatId }
+  /** Sets the layout of one screen, or of every screen if no participant is given. */
+  | { type: 'screen-layout'; layout: string; participant?: string };
 
 export interface ErrorMessage {
   message: string;

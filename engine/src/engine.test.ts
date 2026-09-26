@@ -173,3 +173,19 @@ describe('match', () => {
     expect(replay(swapGame, headerOf(s), log)).toEqual(s);
   });
 });
+
+describe('eventsFor', () => {
+  it('shows public events to everyone and private ones only to their seats, without the visibility list', async () => {
+    const { eventsFor } = await import('./match');
+    const events = [
+      { type: 'dealt', round: 1 },
+      { type: 'peek', card: '7H', visibleTo: ['s1'] },
+    ];
+    expect(eventsFor(events, { kind: 'public' })).toEqual([{ type: 'dealt', round: 1 }]);
+    expect(eventsFor(events, { kind: 'seat', seat: 's2' })).toEqual([{ type: 'dealt', round: 1 }]);
+    expect(eventsFor(events, { kind: 'seat', seat: 's1' })).toEqual([
+      { type: 'dealt', round: 1 },
+      { type: 'peek', card: '7H' },
+    ]);
+  });
+});

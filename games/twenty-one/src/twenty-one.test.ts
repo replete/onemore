@@ -4,6 +4,7 @@ import {
   autoAnswer,
   createMatch,
   decisionsFor,
+  eventsFor,
   headerOf,
   newRngState,
   newSeed,
@@ -75,6 +76,9 @@ describe('twenty-one', () => {
         log.push(r.entry);
         s = r.state;
         expectNoLeaks(s);
+        for (const viewer of viewers(s)) {
+          expect(findLeaks(eventsFor(r.events, viewer), secretsFor(s as MatchState<unknown>, viewer))).toEqual([]);
+        }
       }
 
       // Round over: every card accounted for, the dealer's hand played out, results for everyone.

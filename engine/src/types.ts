@@ -151,7 +151,11 @@ export interface LogEntry {
 
 export type Outcome = { results: Record<SeatId, string> };
 
-export type GameEvent = { type: string; [key: string]: unknown };
+/**
+ * Something that happened, for animation and announcements (architecture §3.1).
+ * Public unless `visibleTo` lists the seats allowed to see it; use eventsFor() to filter.
+ */
+export type GameEvent = { type: string; visibleTo?: SeatId[]; [key: string]: unknown };
 
 // --- Game catalogue -----------------------------------------------------------------
 
@@ -172,4 +176,6 @@ export interface GameMeta {
   minSeats: number;
   maxSeats: number;
   options: GameOption[];
+  /** Layouts the shared screen can switch between; the first is the default (D-020). */
+  layouts?: { id: string; label: string }[];
 }

@@ -4,6 +4,7 @@ import {
   autoAnswer,
   createMatch,
   decisionsFor,
+  eventsFor,
   headerOf,
   newRngState,
   newSeed,
@@ -84,6 +85,9 @@ describe('carcass eon', () => {
         if (!r.ok) throw new Error(r.error);
         log.push(r.entry);
         s = r.state;
+        for (const viewer of [{ kind: 'public' as const }, ...s.seats.map((seat) => ({ kind: 'seat' as const, seat }))]) {
+          expect(findLeaks(eventsFor(r.events, viewer), secretsFor(s as MatchState<unknown>, viewer))).toEqual([]);
+        }
         expectInvariants(s);
         if (step % 10 === 0) expectNoLeaks(s);
       }

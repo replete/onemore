@@ -248,3 +248,17 @@ describe('choosing a game', () => {
     await Promise.all([tv, sam, jo].map((t) => t.room.leave()));
   });
 });
+
+describe('screen layouts', () => {
+  it('lets admins switch the shared screen between the game’s layouts', async () => {
+    const tv = await Tester.create();
+    tv.room.send('admin', { type: 'set-game', game: 'carcass-eon' });
+    tv.room.send('admin', { type: 'make-screen' });
+    await tv.until(() => tv.latest.room!.you.role === 'screen');
+    tv.room.send('admin', { type: 'screen-layout', layout: 'follow' });
+    await tv.until(() => tv.latest.room!.you.layout === 'follow');
+    tv.room.send('admin', { type: 'screen-layout', layout: 'sideways' });
+    await tv.until(() => tv.latest.error?.message === 'No such layout.');
+    await tv.room.leave();
+  });
+});

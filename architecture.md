@@ -151,7 +151,7 @@ It has four properties:
 - **Deterministic.** The same seed and the same actions always produce the same game. All randomness goes through the RNG passed in by the engine.
 - **Pure.** No I/O, no clocks, no globals. That makes it easy to test, to replay and to run anywhere.
 - **Plain data.** State, actions, views and events are JSON-serialisable data, with no classes, functions, Maps or Dates. That's what lets them be stored, sent over the wire and replayed. Actions refer to components by id, never by object. Research 01 found that holding object references in actions was the most common mistake in one framework (TAG).
-- **Events alongside state.** `apply` also returns what happened ("seat 2 drew a card", "7♥ moved from hand to pile") so clients can animate it. Events are redacted per viewer, just like views: others see "Sam drew a card", Sam sees "you drew the 7♥". Events can nest cause and effect, like Hearthstone's blocks ("Sam played a spell → it hit the dragon → the dragon died"), so clients can put animations in order.
+- **Events alongside state** (built). `apply` also returns what happened ("seat 2 drew a card", "7♥ moved from hand to pile") so clients can animate it. Events are redacted per viewer, just like views: others see "Sam drew a card", Sam sees "you drew the 7♥". An event is public unless it lists `visibleTo` seats, and the server sends each client `eventsFor(events, viewer)` with its next view. Leak tests cover events too. Events can nest cause and effect, like Hearthstone's blocks ("Sam played a spell → it hit the dragon → the dragon died"), so clients can put animations in order.
 
 This shape is close to boardgame.io, OpenSpiel, TAG and Board Game Arena.
 

@@ -102,7 +102,46 @@
   const secondsLeft = (until: number) => Math.max(0, Math.ceil((until - (now + session.clockOffset)) / 1000));
   let waitingFor = $derived(new Map((message?.waiting ?? []).map((w) => [w.seat, w.until])));
 
+  // Shared-screen layout, chosen by an admin (D-020).
+  let layouts = $derived(room.games.find((g) => g.id === room.game)?.layouts ?? []);
+  let screens = $derived(room.participants.filter((p) => p.role === 'screen'));
+  let layout = $derived(you.layout ?? layouts[0]?.id ?? 'whole');
+  let recentTile = $derived(view?.lastPlaced ? view.board.find((t) => t.cell === view!.lastPlaced) : undefined);
+
   let ranking = $derived([...seats].sort((a, b) => (view!.scores[b] ?? 0) - (view!.scores[a] ?? 0)));
+
+  // --- Announcing what just happened ------------------------------------------------
+  interface Scored {
+    type: 'scored';
+    kind: 'city' | 'road' | 'monastery' | 'field';
+    seats: string[];
+    points: number;
+    cells: string[];
+    final?: boolean;
+  }
+  const KIND = { city: 'city', road: 'road', monastery: 'monastery', field: 'farm' } as const;
+  let toasts = $state<{ id: number; text: string; colour: string }[]>([]);
+  let flash = $state<string[]>([]);
+  let finalScoring = $state<Scored[]>([]);
+  let toastId = 0;
+
+  $effect(() => {
+    const events = message?.events ?? [];
+    untrack(() => {
+      const scored = events.filter((e) => e.type === 'scored') as unknown as Scored[];
+      if (scored.length === 0) return;
+      const during = scored.filter((e) => !e.final);
+      finalScoring = [...finalScoring, ...scored.filter((e) => e.final)];
+      for (const e of during) {
+        const id = ++toastId;
+        const who = e.seats.map((s) => names[s] ?? s).join(' & ');
+        toasts = [...toasts, { id, text: `${who} +${e.points} · ${KIND[e.kind]}`, colour: seatColour(e.seats[0]!) }];
+        setTimeout(() => (toasts = toasts.filter((t) => t.id !== id)), 4000);
+      }
+      flash = [...new Set(scored.flatMap((e) => e.cells))];
+      setTimeout(() => (flash = []), 1600);
+    });
+  });
 </script>
 
 {#snippet scoreboard(compact: boolean)}
@@ -119,7 +158,44 @@
   </ul>
 {/snippet}
 
+{#snippet announcements()}
+  <div class="toasts" aria-live="polite">
+    {#each toasts as t (t.id)}
+      <p class="toast" style="--who: {t.colour}">{t.text}</p>
+    {/each}
+  </div>
+{/snippet}
+
+{#snippet finalBreakdown()}
+  {#if finalScoring.length}
+    <details class="breakdown">
+      <summary>How the last points were scored</summary>
+      <ul>
+        {#each finalScoring as e, i (i)}
+          <li>{e.seats.map((s) => names[s] ?? s).join(' & ')} +{e.points} · unfinished {KIND[e.kind]}</li>
+        {/each}
+      </ul>
+    </details>
+  {/if}
+{/snippet}
+
+{#snippet layoutPicker()}
+  {#if you.admin && layouts.length > 1 && (screens.length > 0 || isScreen)}
+    <div class="layouts" role="group" aria-label="Shared screen layout">
+      <span class="muted">Screen:</span>
+      {#each layouts as l (l.id)}
+        <button
+          class="small"
+          class:secondary={(screens[0]?.layout ?? layouts[0]!.id) !== l.id}
+          onclick={() => session.admin({ type: 'screen-layout', layout: l.id })}>{l.label}</button
+        >
+      {/each}
+    </div>
+  {/if}
+{/snippet}
+
 {#snippet adminTools()}
+  {@render layoutPicker()}
   {#if you.admin}
     <div class="admin">
       {#each message?.waiting ?? [] as w (w.seat)}
@@ -143,7 +219,15 @@
   <!-- Shared screen: the whole map, the scores, and the tile in play. -->
   <main class="screen">
     <div class="map">
-      <Board tiles={view.board} followers={view.followers} highlight={view.lastPlaced} />
+      <Board
+        tiles={view.board}
+        followers={view.followers}
+        highlight={view.lastPlaced}
+        {flash}
+        focus={layout === 'follow' && recentTile ? { x: recentTile.x, y: recentTile.y } : null}
+        focusRadius={2}
+      />
+      {@render announcements()}
     </div>
     <aside>
       <h1>Carcass Eon</h1>
@@ -156,6 +240,7 @@
             </li>
           {/each}
         </ol>
+        {@render finalBreakdown()}
       {:else}
         {#if view.current}
           <div class="current">
@@ -167,6 +252,7 @@
         {/if}
         {@render scoreboard(false)}
         <p class="muted">{view.bag} tiles left{view.farmers ? ' · Farmers on' : ''}</p>
+        {@render layoutPicker()}
       {/if}
     </aside>
   </main>
@@ -180,6 +266,7 @@
         tiles={view.board}
         followers={view.followers}
         highlight={view.lastPlaced}
+        {flash}
         {ghosts}
         {preview}
         {hotspots}
@@ -188,6 +275,7 @@
         onGhost={tapCell}
         onHotspot={(id) => (chosenSpot = id)}
       />
+      {@render announcements()}
     </div>
 
     <section class="panel">
@@ -198,6 +286,7 @@
             <li><span>{names[seat]}</span><strong>{view.scores[seat]}</strong></li>
           {/each}
         </ol>
+        {@render finalBreakdown()}
       {:else if placeDecision && view.current}
         <div class="place">
           <button class="tile-button" onclick={rotate} aria-label="Rotate the tile">
@@ -292,6 +381,43 @@
   .scores.compact .dot {
     width: 1.1rem;
     height: 1.1rem;
+  }
+
+  .map {
+    position: relative;
+  }
+  .toasts {
+    position: absolute;
+    left: 0.75rem;
+    bottom: 0.75rem;
+    display: grid;
+    gap: 0.4rem;
+    pointer-events: none;
+  }
+  .toast {
+    margin: 0;
+    background: rgb(0 0 0 / 0.72);
+    border-left: 0.35rem solid var(--who);
+    border-radius: 0.5rem;
+    padding: 0.45rem 0.75rem;
+    font-weight: 700;
+    animation: toast-in 0.25s ease-out;
+  }
+  .screen .toast {
+    font-size: 1.4rem;
+  }
+  @keyframes toast-in {
+    from {
+      opacity: 0;
+      transform: translateY(0.5rem);
+    }
+  }
+  .breakdown {
+    color: var(--muted);
+  }
+  .breakdown ul {
+    margin: 0.4rem 0 0;
+    padding-left: 1.1rem;
   }
 
   /* Shared screen */
@@ -418,6 +544,13 @@
     width: 3.5rem;
     height: 3.5rem;
     border-radius: 0.2rem;
+  }
+  .layouts {
+    display: flex;
+    gap: 0.4rem;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
   }
   .admin {
     display: flex;

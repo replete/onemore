@@ -25,6 +25,10 @@ export const meta: GameMeta = {
       default: true,
     },
   ],
+  layouts: [
+    { id: 'whole', label: 'Whole map' },
+    { id: 'follow', label: 'Follow the action' },
+  ],
 };
 
 export interface CarcassState {
@@ -38,6 +42,8 @@ export interface CarcassState {
   current: string | null;
   /** Cell of the tile placed this turn, during the follow step. */
   lastPlaced: string | null;
+  /** Cell of the most recently placed tile, kept for display until the next placement. */
+  recent: string | null;
   followers: Follower[];
   supply: Record<SeatId, number>;
   scores: Record<SeatId, number>;
@@ -50,6 +56,7 @@ export interface CarcassView {
   phase: CarcassState['phase'];
   turn: SeatId | null;
   board: { cell: string; def: string; rotation: number; x: number; y: number }[];
+  /** The most recently placed tile. */
   lastPlaced: string | null;
   current: string | null;
   bag: number;
@@ -70,19 +77,22 @@ function currentDef(ctx: Ctx, g: CarcassState): string {
 }
 
 /** Draws until a tile fits somewhere; tiles that don't are set aside for all to see. Ends the game when the bag is empty. */
-function drawPlaceable(ctx: Ctx, g: CarcassState): void {
+function drawPlaceable(ctx: Ctx, g: CarcassState): GameEvent[] {
   g.current = null;
+  const events: GameEvent[] = [];
   while (ctx.table.zone('bag').items.length > 0) {
     const id = ctx.table.draw('bag', 'current');
-    if (legalPlacements(g.board, ctx.table.component(id).def).length > 0) {
+    const def = ctx.table.component(id).def;
+    if (legalPlacements(g.board, def).length > 0) {
       g.current = id;
       g.phase = 'place';
-      return;
+      return events;
     }
     ctx.table.move(id, 'discard');
-    g.discarded.push(ctx.table.component(id).def);
+    g.discarded.push(def);
+    events.push({ type: 'discarded', def });
   }
-  finalScoring(g);
+  return [...events, ...finalScoring(g)];
 }
 
 /** Features on the placed tile that a follower could take right now. */
@@ -131,30 +141,34 @@ function returnFollowers(g: CarcassState, nodes: string[]): void {
   });
 }
 
-function finalScoring(g: CarcassState): void {
+function finalScoring(g: CarcassState): GameEvent[] {
+  const events: GameEvent[] = [];
   const { regions: rs } = regions(g.board);
   rs.forEach((region) => {
     if (region.kind === 'field' && !g.farmers) return;
     const winners = majority(region, g.followers);
     if (winners.length === 0) return;
     const points = regionPoints(g.board, region, rs, true);
+    if (points === 0) return;
     for (const seat of winners) g.scores[seat] = (g.scores[seat] ?? 0) + points;
+    events.push({ type: 'scored', kind: region.kind, seats: winners, points, cells: region.cells, final: true });
   });
   g.phase = 'done';
   g.current = null;
+  events.push({ type: 'ended', scores: { ...g.scores } });
+  return events;
 }
 
 function endTurn(ctx: Ctx, g: CarcassState): GameEvent[] {
   const events = scoreCompleted(g);
   g.lastPlaced = null;
   g.turn = (g.turn + 1) % ctx.seats.length;
-  drawPlaceable(ctx, g);
-  return events;
+  return [...events, ...drawPlaceable(ctx, g)];
 }
 
 export const carcassEon: GameModule<CarcassState> = {
   id: 'carcass-eon',
-  version: '0.1.0',
+  version: '0.2.0',
 
   setup(ctx) {
     if (ctx.seats.length < MIN_SEATS || ctx.seats.length > MAX_SEATS) {
@@ -176,6 +190,7 @@ export const carcassEon: GameModule<CarcassState> = {
       board: { [cellKey(0, 0)]: { def: START_TILE, rotation: 0, x: 0, y: 0 } },
       current: null,
       lastPlaced: null,
+      recent: null,
       followers: [],
       supply: Object.fromEntries(seats.map((s) => [s, FOLLOWERS])),
       scores: Object.fromEntries(seats.map((s) => [s, 0])),
@@ -232,6 +247,7 @@ export const carcassEon: GameModule<CarcassState> = {
       table.move(g.current!, 'board');
       g.current = null;
       g.lastPlaced = cell;
+      g.recent = cell;
       g.placed += 1;
       const events: GameEvent[] = [{ type: 'placed', seat, cell, def, rotation }];
       if (followerOptions(g, seat).length === 0) return [...events, ...endTurn(ctx, g)];
@@ -255,7 +271,7 @@ export const carcassEon: GameModule<CarcassState> = {
       board: Object.entries(g.board)
         .map(([cell, p]) => ({ cell, ...p }))
         .sort((a, b) => a.y - b.y || a.x - b.x),
-      lastPlaced: g.lastPlaced,
+      lastPlaced: g.recent,
       current: g.current ? s.table.components[g.current]!.def : null,
       bag: s.table.zones['bag']!.items.length,
       followers: g.followers.map((f) => ({ ...f, kind: tileDef(g.board[f.cell]!.def).features[f.feature]!.kind })),

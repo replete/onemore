@@ -6,6 +6,7 @@ export {
   autoAnswer,
   createMatch,
   decisionsFor,
+  eventsFor,
   headerOf,
   replay,
   submit,

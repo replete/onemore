@@ -145,6 +145,13 @@ export function applyAnswer<G>(game: GameModule<G>, state: MatchState<G>, entry:
   return { ok: true, state: draft, events, entry };
 }
 
+/** The events `viewer` may see, without their visibility lists. Every event sent to a client goes through this. */
+export function eventsFor(events: GameEvent[], viewer: Viewer): GameEvent[] {
+  return events
+    .filter((e) => !e.visibleTo || (viewer.kind === 'seat' && e.visibleTo.includes(viewer.seat)))
+    .map(({ visibleTo: _, ...rest }) => rest as GameEvent);
+}
+
 export function viewFor<G>(game: GameModule<G>, state: MatchState<G>, viewer: Viewer): unknown {
   return game.view(state, viewer);
 }
