@@ -5,3 +5,8 @@ logs/
 *.log
 .DS_Store
 Icon?
+
+# Secrets (API keys). Commit a .env.example instead.
+.env
+.env.*
+!.env.example

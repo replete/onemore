@@ -212,7 +212,7 @@ That one mechanism covers the common shapes of play:
 - **Simultaneous play:** an `each` decision (Shithead's opening swap, drafting, bidding).
 - **Out-of-turn interrupts** (D-013, D-023) come in two kinds:
   - **Non-blocking (the default).** An `any` decision that sits alongside the normal turn instead of on top of it. Play doesn't pause, and the first valid claim wins. This covers "Snap!", and cut-ins and burns in Shithead. Prompts are private and nothing on the shared screen changes, so nobody learns who could have responded.
-  - **Blocking windows**, only where the rules need a pause, such as counter-spells. They open at a few fixed points for every eligible seat, whether or not the player holds a response. Each runs at a fixed short pace (about 2.5 s, with a visible timer) and closes early only if everyone passes by hand. There's no auto-pass unless a game opts in (D-034, proposed). Research 05 found this is the only approach that never gives away a hand.
+  - **Blocking windows**, only where the rules need a pause, such as counter-spells. They open at a few fixed points for every eligible seat, whether or not the player holds a response. Each runs at a fixed short pace (about 2.5 s, with a visible timer) and closes early only if everyone passes by hand. There's no auto-pass unless a game opts in (D-037, proposed). Research 05 found this is the only approach that never gives away a hand.
 - **Chains of effects:** responses to responses stack up and resolve in order, like Magic's stack.
 
 The references are TAG's `IExtendedSequence` stack, BGA's `MULTIPLE_ACTIVE_PLAYER` states, boardgame.io's stages, and Hearthstone's blocks.
@@ -226,7 +226,7 @@ The references are TAG's `IExtendedSequence` stack, BGA's `MULTIPLE_ACTIVE_PLAYE
   - The client draws countdowns every animation frame and blends in corrections.
   - The server accepts an action up to the deadline plus a small capped grace, min(150 ms, RTT/2 + 50 ms), and rejects anything later with a clear message.
   - The pings double as the heartbeat that detects dead connections.
-- **Turn timers are off by default** (D-034, proposed): people in the same room can nudge each other. A game can offer a generous timer, e.g. 60 s with a visible rope in the last 15 s.
+- **Turn timers are an optional game setting**, off by default (D-034). Admins switch them on in Game options for games that support them, e.g. 60 s with a visible rope in the last 15 s.
 - If two answers to an `any` decision race, the first valid one wins, and the log fixes the order. With **Fair first-response** on (D-022, D-032):
   - The server collects claims for about 120 ms after the first valid one.
   - It ranks them by arrival time minus half each client's round trip, using round trips it measured itself. Client timestamps are never trusted.
@@ -300,7 +300,7 @@ Research 01 backs this. Every broad declarative rules language it looked at hit 
 - **Library:** shuffle, deal, draw, rank orders (ace high or low, trumps), sets and runs, trick-taking, poker hand evaluation, turn rotation, betting and chips.
 - **First game: 21** (D-015). It has one hidden card, simple actions (hit or stand) and a clear result. A minimal version with no betting doubles as the walking skeleton.
 - **Second game: Shithead.** It tests what 21 doesn't: hidden, owner-only and public zones in one game, a simultaneous opening swap, and out-of-turn play with timers.
-- **Then** (D-036, proposed; research 02): Crazy Eights/Switch (matching with special cards), Cheat (face-down claims and challenges), and Spoons (simultaneous passing and a reaction race). Each game adds one family and one new primitive.
+- **Then** (D-036; the card order is still proposed; research 02): Carcass Eon comes first (see Board games below), then Crazy Eights/Switch (matching with special cards), Cheat (face-down claims and challenges), and Spoons (simultaneous passing and a reaction race). Each game adds one family and one new primitive.
 - **House rules are options.** Research 02 found that most variants of a folk game change only two switches: which cards have special powers, and the draw and penalty rules. Each game ships those as options, with a sensible default.
 
 ### Collectible / deck-building card games
@@ -330,6 +330,7 @@ Research 01 backs this. Every broad declarative rules language it looked at hit 
   - A placement is legal if its edges match the neighbouring tiles.
   - Scoring tracks features as they merge across tiles and completes them (union-find over feature segments).
   - Placement is two decisions: pick a site, then a rotation. The possible sites show as ghost positions on the screen and on the phone.
+- **Carcass Eon** (D-038) is next: our take on Carcassonne-style tile laying. Tile geometry is data, so the pictures never decide what connects. Art starts as procedural SVG, followed by a trial of AI-generated art. See [games/carcass-eon/DESIGN.md](games/carcass-eon/DESIGN.md).
 - **The shared screen shines here.** The board lives on the TV, and an admin can have it follow the active player. Each phone shows your tile, your pieces and a zoomed-in placement view.
 
 ## 5. Technology

@@ -10,8 +10,10 @@
 
 Things we still need to decide. Each one becomes a D-entry once it's decided.
 
-- Turn timers off by default, and fixed-pace response windows? (D-034, proposed)
-- Which card games come after 21 and Shithead? (D-036, proposed)
+- Fixed-pace response windows? (D-037, proposed)
+- The card game order after Carcass Eon. (D-036, proposed)
+- Carcass Eon: theme, tile counts, player count, and leaving fields out of v1. (See [games/carcass-eon/DESIGN.md](games/carcass-eon/DESIGN.md#open-questions).)
+- Carcass Eon art: textures in procedural shapes, or whole-tile illustrations? Decide after the WaveSpeed trial. (D-038)
 ---
 
 ## D-001 Root working documents
@@ -581,19 +583,15 @@ Turn off its state sync (no `@colyseus/schema` or `StateView`), and send each vi
 
 **Consequences:** Expected clock error in one room is about 2–20 ms, well below what anyone can see in a countdown.
 
-## D-034 Turn timers off by default, fixed-pace response windows
+## D-034 Turn timers are an optional game setting
 
-**Status:** Proposed
+**Status:** Accepted, 2026-09-26
 
-**Context:** Research 05 found that casual players tolerate short, visible, forgiving timers, but hate waiting on someone stalling. People in the same room can just nudge each other. It also found that skipping response windows when nobody can respond leaks information (MTG Arena, Master Duel), and the only approach that leaks nothing is a window that always runs at the same pace.
+**Context:** Research 05 found that casual players tolerate short, visible, forgiving timers, but hate waiting on someone stalling. People in the same room can just nudge each other.
 
-**Decision:**
+**Decision:** Turn timers are a setting that each game may support, off by default. Admins switch them on in **Game options** (for example 60 seconds, with a visible rope in the last 15). The absence rules (D-026) still cover disconnected players either way.
 
-- **No turn timers by default.** A game can offer a generous one as an option: for example 60 seconds, with a visible rope in the last 15. The absence rules (D-026) still cover disconnected players.
-- **Blocking response windows (D-023)** open at a few fixed points for every eligible player, whether or not they hold a response. They run at a fixed short pace, about 2.5 seconds with a visible timer, and close early only if everyone passes by hand.
-- **A prompt setting can come later:** "always prompt" (the default), "smart", or "quick" for players who accept the tells.
-
-**Consequences:** Games stay unhurried, and response windows never give away a hand. Some windows cost a couple of seconds each.
+**Consequences:** Rules modules declare whether they support a turn timer and what happens when it runs out, e.g. a default action (D-013, D-026).
 
 ## D-035 Persistence, stage 0
 
@@ -619,17 +617,46 @@ Turn off its state sync (no `@colyseus/schema` or `StateView`), and send each vi
 - A restart still ends live games until the SQLite stage.
 - Logs can be deleted freely, because they contain no personal data.
 
-## D-036 Card game roadmap
+## D-036 Game roadmap
 
-**Status:** Proposed
+**Status:** Accepted, 2026-09-26, in part. Carcass Eon comes next (your call). The card game order after it is still proposed.
 
 **Context:** [Research 02](research/02-card-game-families-result.md) mapped card games into about fifteen families built from a few recurring primitives. It found that most variants of folk games change only two switches: the special-card table, and the draw and penalty rules. Its shortlist for casual groups of 2–8 with newcomers is Cheat, Crazy Eights/Switch, Spoons/Pig, Shithead, Pontoon, Go Fish, President and Knockout Whist.
 
 **Decision:**
 
-- **The order:** 21 (banking), then Shithead (beating: hidden table cards, out-of-turn burns), then Crazy Eights/Switch (matching), then Cheat (bluffing and challenges), then Spoons (simultaneous play and a reaction race). Each one adds a family and a new primitive.
-- **House rules as options.** Each game ships its special-card table and its draw and penalty rules as options with a sensible default, because that's where groups disagree.
+- **The order:**
+  1. 21: banking (minimal version done).
+  2. **Carcass Eon**: our take on Carcassonne-style tile laying (D-038).
+  3. Then card games, still proposed: Shithead (beating: hidden table cards, out-of-turn burns), then Crazy Eights/Switch (matching), then Cheat (bluffing and challenges), then Spoons (simultaneous play and a reaction race).
+- **House rules as options.** Each card game ships its special-card table and its draw and penalty rules as options with a sensible default, because that's where groups disagree.
 - **Speed games need three explicit rules:** what counts as a valid claim, how ties are broken, and what a false claim costs. Research 02 found that without all three, arguments take over.
 
-**Consequences:** The engine library grows one family at a time: beat-or-pick-up, matching with special cards, face-down claims and challenges, and simultaneous passing.
+**Consequences:** The board-game side of the engine (geometry, placement, connected features) comes before the rest of the card families.
+
+## D-037 Fixed-pace response windows
+
+**Status:** Proposed
+
+**Context:** Research 05 found that skipping response windows when nobody can respond leaks information (MTG Arena, Master Duel). The only approach that leaks nothing is a window that always runs at the same pace.
+
+**Decision:** Blocking response windows (D-023) open at a few fixed points for every eligible player, whether or not they hold a response. They run at a fixed short pace, about 2.5 seconds with a visible timer, and close early only if everyone passes by hand. A prompt setting can come later: "always prompt" (the default), "smart", or "quick" for players who accept the tells.
+
+**Consequences:** Response windows never give away a hand, at the cost of a couple of seconds each. This matters little until a game has blocking windows. Shithead's burns are non-blocking.
+
+## D-038 Carcass Eon
+
+**Status:** Accepted, 2026-09-26. The art approach is still to be decided after a trial.
+
+**Context:** The next game is a board game (D-036): our own take on Carcassonne-style tile laying, named **Carcass Eon**. Game mechanics aren't protected, but names, art and rulebook text are (vision.md), so everything players see is ours. It's the first game where graphics matter.
+
+**Decision:**
+
+- **Tiles and rules.** The v1 tile set and rules are the classic base-game mechanics: roads, cities, monasteries, followers and majority scoring. Fields and farmers are an option for later. Everything is described in our own words and ids ([games/carcass-eon/DESIGN.md](games/carcass-eon/DESIGN.md)).
+- **Tile geometry is data.** Each tile's edges and features are defined as data, and the game logic uses only that data. The pictures never decide what connects.
+- **Art comes in two stages:**
+  1. Procedural SVG tiles drawn from that data, which are correct by construction. We use these for development, and they stay as a fallback.
+  2. A trial of AI-generated art through WaveSpeed (`WAVESPEED_API_KEY` in `.env`, never committed), with your feedback on a first set before we commit to an approach.
+
+**Consequences:** The engine gains board geometry: an unbounded grid of sites, placement with rotation, and connected features (union-find). Per D-006, that stays in the game's code until a second board game needs it.
 

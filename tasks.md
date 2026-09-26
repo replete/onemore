@@ -4,9 +4,14 @@
 
 ## Now
 
-- [ ] You: play it on a real TV and real phones on the same Wi-Fi (see [README.md](README.md)). Note anything that feels wrong.
-- [ ] Claude: write the rules of 21 and its variations, using research 02 (D-021, D-036).
-- [ ] You: accept, change or reject D-034 (no turn timers by default; fixed-pace response windows) and D-036 (card game roadmap).
+- [ ] You: answer the Carcass Eon open questions: theme, tile counts, players, fields ([DESIGN.md](games/carcass-eon/DESIGN.md#open-questions)).
+- [ ] You: play 21 on a real TV and real phones on the same Wi-Fi (see [README.md](README.md)). Note anything that feels wrong.
+- [ ] Carcass Eon, following the build plan in [DESIGN.md](games/carcass-eon/DESIGN.md#build-plan):
+  - [ ] tile data for all 24 types, a procedural SVG renderer and a contact sheet;
+  - [ ] unit tests for matching, joining, completion and scoring;
+  - [ ] the rules module, with random games, leak tests and replay;
+  - [ ] the board component (pan and zoom) and the placement and follower interactions;
+  - [ ] the WaveSpeed art trial, then your feedback (D-038).
 
 ## Next
 
@@ -26,7 +31,8 @@ Then:
 - [ ] Events and animation: deal, draw and flip, with events redacted per viewer (architecture §3.1).
 - [ ] A standard 52-card deck content pack, plus a generic renderer for cards and zones.
 - [ ] Drag and drop on the phone, driven by prompts ([architecture §3.5](architecture.md#35-prompts-and-the-ui)).
-- [ ] 21 v1: the base game plus its variations as options (D-021).
+- [ ] 21: write the full rules and variations (research 02), then 21 v1 with the variations as options (D-021).
+- [ ] Turn timers as an optional game setting (D-034).
 - [ ] Shithead, then Crazy Eights/Switch, Cheat and Spoons, with house rules as options (D-036).
 
 ## Later
@@ -35,7 +41,6 @@ Then:
 - [ ] Shithead, the second game: interrupts, response windows and synced timers (D-013).
 - [ ] Spectator links (D-011), screen layouts per game, turning any client into a screen, and lobby approval (D-020).
 - [ ] Fair first-response (D-032): a 120 ms collection window, ranking by server-measured round trips, and margins shown. Prove it with simulated latency and real phones.
-- [ ] A tile-laying prototype (Carcassonne-like) to test boards, geometry and the shared screen.
 - [ ] A collectible card prototype: a tiny set of about 20 cards, the effects vocabulary and the effect queue.
 - [ ] Rooms that survive restarts: a SQLite (WAL) store behind `MatchStore`, snapshots at round boundaries, rooms reloaded lazily when someone reconnects, and drain-based deploys (D-035).
 - [ ] "Verify this game": publish SHA-256 of the seed at the start and reveal the seed at the end (D-031).
@@ -46,6 +51,7 @@ Then:
 
 ## Done
 
+- [x] 2026-09-26 Carcass Eon design (D-038): rules, tile set, engine mapping, screens and art plan. Turn timers made an optional game setting (D-034). `.env` added to `.gitignore`.
 - [x] 2026-09-26 Reviewed research 02, 04, 05 and 06, recorded as D-031 to D-036:
   - randomness: per-stream HMAC keys, per-round shuffles, a version in the header, golden and uniformity tests, and a scan for clocks and `Math.random` in rules code;
   - match logs: versioned lines, sequence numbers, no names, and a `MatchStore` interface.
