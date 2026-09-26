@@ -1,0 +1,5 @@
+packages:
+  - engine
+  - games/*
+  - server
+  - client
