@@ -4,12 +4,12 @@
 
 ## Now
 
-- [ ] You: answer the Carcass Eon open questions: theme, tile counts, players, fields ([DESIGN.md](games/carcass-eon/DESIGN.md#open-questions)).
 - [ ] You: play 21 on a real TV and real phones on the same Wi-Fi (see [README.md](README.md)). Note anything that feels wrong.
 - [ ] Carcass Eon, following the build plan in [DESIGN.md](games/carcass-eon/DESIGN.md#build-plan):
-  - [ ] tile data for all 24 types, a procedural SVG renderer and a contact sheet;
-  - [ ] unit tests for matching, joining, completion and scoring;
-  - [ ] the rules module, with random games, leak tests and replay;
+  - [x] tile data for all 24 types, a procedural SVG renderer and a contact sheet (`pnpm --filter @onemore/carcass-eon sheet`);
+  - [x] unit tests for matching, joining, completion and scoring;
+  - [x] the rules module, with random games, leak tests and replay;
+  - [ ] the server picks the game: a game choice in the lobby, and seat limits per game;
   - [ ] the board component (pan and zoom) and the placement and follower interactions;
   - [ ] the WaveSpeed art trial, then your feedback (D-038).
 
@@ -51,6 +51,7 @@ Then:
 
 ## Done
 
+- [x] 2026-09-26 Carcass Eon scope decided (D-039): medieval theme, classic tiles, 2–5 players, Farmers on by default.
 - [x] 2026-09-26 Carcass Eon design (D-038): rules, tile set, engine mapping, screens and art plan. Turn timers made an optional game setting (D-034). `.env` added to `.gitignore`.
 - [x] 2026-09-26 Reviewed research 02, 04, 05 and 06, recorded as D-031 to D-036:
   - randomness: per-stream HMAC keys, per-round shuffles, a version in the header, golden and uniformity tests, and a scan for clocks and `Math.random` in rules code;

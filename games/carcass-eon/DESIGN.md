@@ -1,6 +1,6 @@
 # Carcass Eon: design
 
-> Working document for our take on Carcassonne-style tile laying (D-038). The mechanics follow the classic base game. The name, theme, art and all text are ours. Open questions are at the end.
+> Working document for our take on Carcassonne-style tile laying (D-038, D-039). The mechanics follow the classic base game, including fields and farmers. The theme is medieval. The name, art and all text are ours.
 
 ## The game in one paragraph
 
@@ -18,7 +18,7 @@ For 2–5 players, about 30–45 minutes. The shared screen shows the whole map 
 **A turn**
 1. **Draw.** Take the top tile from the bag. Everyone sees it.
 2. **Place.** Add it to the map, touching at least one tile edge-to-edge, in a rotation where every touching edge matches. If the tile fits nowhere, it's shown to everyone, set aside, and you draw again.
-3. **Follow (optional).** Put one follower from your supply on one feature of the tile you just placed: a road, a city or a monastery. You can't if that feature already connects to one with a follower on it, whoever's it is.
+3. **Follow (optional).** Put one follower from your supply on one feature of the tile you just placed: a road, a city, a monastery or, with Farmers on, a field. You can't if that feature already connects to one with a follower on it, whoever's it is. A follower in a field lies down as a *farmer* and stays until the end of the game.
 4. **Score.** Every feature this tile completed scores now. Followers on scored features go back to their owners.
 
 **Completed features**
@@ -29,6 +29,8 @@ For 2–5 players, about 30–45 minutes. The shared screen shows the whole map 
 | City | Its walls are closed: no open city edge | 2 per tile, +2 per banner |
 | Monastery | All 8 surrounding squares have tiles | 9 (1 + 8) |
 
+**Fields** are never completed during the game. Farmers stay put until the end (see below).
+
 **Who scores:** the player or players with the most followers on the feature. Ties all score in full. Features can end up with several followers when two separately claimed features are joined by a later tile. That's the heart of the game's competition.
 
 **End of game**
@@ -36,10 +38,13 @@ For 2–5 players, about 30–45 minutes. The shared screen shows the whole map 
   - roads: 1 per tile;
   - cities: 1 per tile, +1 per banner;
   - monasteries: 1, +1 per surrounding tile.
+- **Farmers** (option, on by default): each field scores **3 per completed city it touches**, for whoever has the most farmers in it. A city can score for several fields.
 - Highest score wins. Ties are shared.
 
-**Later options (not v1)**
-- Fields and farmers: 3 points per completed city bordering a field. It's the most confusing part of the classic game for newcomers, so it's left out of v1.
+**Options**
+- **Farmers:** on by default. Switch it off for a table of newcomers.
+
+**Later options**
 - Turn timer (D-034).
 - A larger follower worth two.
 - River tiles to start.
@@ -109,6 +114,8 @@ field  E2 S0 S1 S2 W0           (everything below the road)
 
 The tile the player can't place is set aside automatically; it doesn't need a decision. The default answers used for absence (D-026) are the first legal placement and no follower.
 
+Which fields touch which cities is derived from the slots: a field touches a city on a tile where one of its slots is next to one of the city's slots, around the tile's edge.
+
 **Hidden information.**
 - Only the bag order is hidden. The bag is a `count` zone shuffled from stream `shuffle/bag` (D-031).
 - The current tile, the map, followers and scores are all public.
@@ -146,17 +153,12 @@ The tile the player can't place is set aside automatically; it doesn't need a de
 
    My recommendation is textures first, with a side-by-side trial of whole tiles on 3–4 types. You pick. The API key stays in `.env`, which git ignores; generation runs from a script, never from the server or the client.
 
-## Open questions
+## Decided (D-039)
 
-1. **Theme.** Classic medieval, or something that fits the name? Three ideas:
-   - *deep time*: fossil trails, bone-walled settlements and standing stones;
-   - *far-future ruins*: roads as maglev lines, cities as domes;
-   - *storybook medieval*: the classic theme with our own art.
-
-   The theme drives the art prompts and the names of features (roads/trails, cities/settlements, monasteries/shrines, followers).
-2. **Tile counts.** Keep the classic distribution for v1, or start with our own tweaks?
-3. **Players.** 2–5 like the classic game, or stretch to 6 with a second set of followers?
-4. **Fields and farmers.** Confirm they're left out of v1.
+- **Theme:** medieval, for the first iteration.
+- **Tiles:** the classic distribution.
+- **Players:** 2–5.
+- **Farmers:** in v1, as an option that's on by default.
 
 ## Build plan
 

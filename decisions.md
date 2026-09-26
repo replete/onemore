@@ -12,7 +12,6 @@ Things we still need to decide. Each one becomes a D-entry once it's decided.
 
 - Fixed-pace response windows? (D-037, proposed)
 - The card game order after Carcass Eon. (D-036, proposed)
-- Carcass Eon: theme, tile counts, player count, and leaving fields out of v1. (See [games/carcass-eon/DESIGN.md](games/carcass-eon/DESIGN.md#open-questions).)
 - Carcass Eon art: textures in procedural shapes, or whole-tile illustrations? Decide after the WaveSpeed trial. (D-038)
 ---
 
@@ -646,7 +645,7 @@ Turn off its state sync (no `@colyseus/schema` or `StateView`), and send each vi
 
 ## D-038 Carcass Eon
 
-**Status:** Accepted, 2026-09-26. The art approach is still to be decided after a trial.
+**Status:** Accepted, 2026-09-26. The art approach is still to be decided after a trial. D-039 supersedes the part about fields and farmers.
 
 **Context:** The next game is a board game (D-036): our own take on Carcassonne-style tile laying, named **Carcass Eon**. Game mechanics aren't protected, but names, art and rulebook text are (vision.md), so everything players see is ours. It's the first game where graphics matter.
 
@@ -659,4 +658,19 @@ Turn off its state sync (no `@colyseus/schema` or `StateView`), and send each vi
   2. A trial of AI-generated art through WaveSpeed (`WAVESPEED_API_KEY` in `.env`, never committed), with your feedback on a first set before we commit to an approach.
 
 **Consequences:** The engine gains board geometry: an unbounded grid of sites, placement with rotation, and connected features (union-find). Per D-006, that stays in the game's code until a second board game needs it.
+
+## D-039 Carcass Eon v1 scope
+
+**Status:** Accepted, 2026-09-26
+
+**Context:** The open questions in the Carcass Eon design doc (D-038).
+
+**Decision:**
+
+- **Theme:** medieval, for the first iteration.
+- **Tiles:** the classic distribution (24 types, 72 tiles).
+- **Players:** 2–5, as in the classic game.
+- **Fields and farmers are in v1,** as a game option called **Farmers**, on by default. Farmers lie in fields until the end of the game. Each field then scores 3 points per completed city it touches, for whoever has the most farmers in it. A table of newcomers can switch the option off.
+
+**Consequences:** Tile data includes fields, and which fields touch which cities is derived from the tile slots. End-of-game scoring covers fields.
 

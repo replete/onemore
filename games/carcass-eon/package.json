@@ -1,0 +1,20 @@
+{
+  "name": "@onemore/carcass-eon",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./art": "./src/art.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p .",
+    "sheet": "tsx scripts/sheet.ts"
+  },
+  "dependencies": {
+    "@onemore/engine": "workspace:*"
+  },
+  "devDependencies": {
+    "tsx": "^4.23.15"
+  }
+}

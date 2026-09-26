@@ -10,3 +10,6 @@ Icon?
 .env
 .env.*
 !.env.example
+
+# Generated previews
+carcass-eon-sheet.html
