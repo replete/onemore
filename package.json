@@ -10,7 +10,9 @@
     "dev": "pnpm --parallel --filter @onemore/server --filter @onemore/client dev",
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "pnpm -r --no-bail typecheck"
+    "typecheck": "pnpm -r --no-bail typecheck",
+    "build": "pnpm --filter @onemore/client build",
+    "start": "pnpm build && NODE_ENV=production pnpm --filter @onemore/server start"
   },
   "devDependencies": {
     "@types/node": "^26.6.3",

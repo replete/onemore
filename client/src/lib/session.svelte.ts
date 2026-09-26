@@ -4,10 +4,16 @@
 
 import { Client, type Room } from '@colyseus/sdk';
 import type { Answer } from '@onemore/engine';
-import type { AdminCommand, JoinOptions, RoomMessage, ViewMessage } from '@onemore/server/protocol';
+import type { AdminCommand, JoinOptions, PongMessage, RoomMessage, ViewMessage } from '@onemore/server/protocol';
+import { ClockSync } from './clock';
 
-const endpoint = import.meta.env.VITE_SERVER_URL ?? `${location.protocol}//${location.hostname}:5551`;
+// In development the game server runs beside Vite on :5551; in production it serves this page itself.
+const endpoint =
+  import.meta.env.VITE_SERVER_URL ??
+  (import.meta.env.DEV ? `${location.protocol}//${location.hostname}:5551` : location.origin);
 const tokenKey = (code: string) => `onemore:token:${code}`;
+const HEARTBEAT_MS = 15_000; // D-033: re-sync every 15–30 s; doubles as the heartbeat (D-026)
+const DEAD_AFTER_MS = 6_000; // no pong this long after a ping: treat the connection as dead
 
 export type Status = 'idle' | 'connecting' | 'connected' | 'reconnecting' | 'lost';
 
@@ -16,16 +22,24 @@ export class Session {
   view = $state<ViewMessage | null>(null);
   error = $state<string | null>(null);
   status = $state<Status>('idle');
-  /** Server time minus local time, from the latest view (for countdowns). */
+  /** Server time minus Date.now(), from clock sync (D-033). */
   clockOffset = $state(0);
+  /** Best round trip to the server, in ms. */
+  rtt = $state<number | null>(null);
 
   private readonly client = new Client(endpoint);
   private conn: Room | null = null;
   private code: string | null = null;
+  private readonly clock = new ClockSync();
+  private pending = new Map<number, number>(); // ping t -> performance.now() when sent
+  private heartbeat: ReturnType<typeof setInterval> | undefined;
 
   constructor() {
     document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'visible') void this.recover();
+      if (document.visibilityState === 'visible') {
+        void this.recover();
+        this.syncClock(4);
+      }
     });
     window.addEventListener('pageshow', (e) => {
       if (e.persisted) void this.recover();
@@ -78,18 +92,36 @@ export class Session {
     this.conn?.send('name', { name });
   }
 
+  /** "Are you Sam?": ask to take over a disconnected player's seat (D-026). */
+  claim(participant: string): void {
+    this.error = null;
+    this.conn?.send('claim', { participant });
+  }
+
   private attach(room: Room): void {
     this.conn = room;
     this.code = room.roomId;
     this.status = 'connected';
     saveToken(room.roomId, room.reconnectionToken);
+    this.clock.reset();
+    this.pending.clear();
+    this.syncClock(8);
+    this.startHeartbeat();
 
     room.onMessage('room', (message: RoomMessage) => {
       this.room = message;
     });
     room.onMessage('view', (message: ViewMessage) => {
       this.view = message;
-      this.clockOffset = message.serverTime - Date.now();
+      if (this.clock.offset === null) this.clockOffset = message.serverTime - Date.now(); // until pings answer
+    });
+    room.onMessage('pong', (message: PongMessage) => {
+      const sentAt = this.pending.get(message.t);
+      if (sentAt === undefined) return;
+      this.pending.delete(message.t);
+      this.clock.add(sentAt, performance.now(), message.server);
+      this.clockOffset = this.clock.offset ?? this.clockOffset;
+      this.rtt = this.clock.rtt;
     });
     room.onMessage('error', (message: { message: string }) => {
       this.error = message.message;
@@ -100,6 +132,7 @@ export class Session {
     room.onReconnect(() => {
       this.status = 'connected';
       saveToken(room.roomId, room.reconnectionToken);
+      this.syncClock(8);
     });
     room.onLeave((code) => {
       if (this.conn !== room) return;
@@ -107,6 +140,36 @@ export class Session {
       this.status = code === 4000 ? 'idle' : 'lost';
       if (code === 4001 || code === 4000) forgetToken(room.roomId);
     });
+  }
+
+  /** Sends `count` pings about 100 ms apart (D-033). */
+  private syncClock(count: number): void {
+    for (let i = 0; i < count; i++) setTimeout(() => this.ping(), i * 100);
+  }
+
+  private ping(): void {
+    if (!this.conn || this.status !== 'connected') return;
+    const t = performance.now();
+    this.pending.set(t, t);
+    this.conn.send('ping', { t });
+  }
+
+  /**
+   * Every 15 s: ping, and if nothing comes back within 6 s while the page is visible,
+   * assume the socket has quietly died and close it so the SDK reconnects (research 03).
+   */
+  private startHeartbeat(): void {
+    clearInterval(this.heartbeat);
+    this.heartbeat = setInterval(() => {
+      if (document.visibilityState !== 'visible' || this.status !== 'connected') return;
+      const oldest = Math.min(...this.pending.values());
+      if (this.pending.size > 0 && performance.now() - oldest > DEAD_AFTER_MS) {
+        this.pending.clear();
+        (this.conn?.connection as unknown as { close?: (code?: number) => void })?.close?.(4999);
+        return;
+      }
+      this.ping();
+    }, HEARTBEAT_MS);
   }
 
   /** After the page comes back: if the connection was lost, rejoin our seat. */

@@ -24,6 +24,7 @@ Update the docs as part of the work, not afterwards. Docs use British English.
 ```sh
 pnpm install
 pnpm dev          # game server on :5551, web client on :5550 (also on your LAN IP)
+pnpm start        # production: build the client, serve everything from :5551
 pnpm test         # all tests (vitest)
 pnpm typecheck    # every package, including svelte-check
 ```

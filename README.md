@@ -17,6 +17,14 @@ pnpm dev
 2. Phones on the same Wi-Fi scan the QR code. The dev server prints the LAN address, e.g. http://10.0.0.20:5550.
 3. Press **Start game** once everyone's in.
 
+## Run it as one process
+
+```sh
+pnpm start
+```
+
+This builds the client, and the game server serves it on port 5551: http://localhost:5551, or your LAN address with port 5551. Use this for game nights; `pnpm dev` is for development.
+
 ## Test
 
 ```sh

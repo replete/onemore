@@ -56,6 +56,34 @@
   {:else}
     <TwentyOne {session} />
   {/if}
+  {@const room = session.room}
+  {@const you = room.you}
+  {#if room.phase === 'playing' && you.role === 'player' && !you.seat}
+    {@const free = room.participants.filter((p) => p.seat && !p.connected)}
+    <aside class="sheet" aria-live="polite">
+      {#if you.claiming}
+        <p>Waiting for an admin to let you back in as <strong>{room.participants.find((p) => p.id === you.claiming)?.name}</strong>…</p>
+      {:else if free.length}
+        <p>A game is on. Were you playing? Pick your name to get your seat back:</p>
+        <div class="row">
+          {#each free as p (p.id)}
+            <button onclick={() => session.claim(p.id)}>I’m {p.name}</button>
+          {/each}
+        </div>
+      {:else}
+        <p>A game is on. You can watch, and join the next one.</p>
+      {/if}
+    </aside>
+  {/if}
+  {#each room.claims ?? [] as c (c.from)}
+    <aside class="sheet claim" role="alert">
+      <p><strong>{c.fromName || 'Someone'}</strong> wants to rejoin as <strong>{c.targetName}</strong>.</p>
+      <div class="row">
+        <button onclick={() => session.admin({ type: 'approve-claim', participant: c.from })}>Let them in</button>
+        <button class="secondary" onclick={() => session.admin({ type: 'deny-claim', participant: c.from })}>No</button>
+      </div>
+    </aside>
+  {/each}
   {#if session.error}<p class="error toast">{session.error}</p>{/if}
 {:else if !checked}
   <p class="centered">Connecting…</p>
@@ -106,6 +134,31 @@
     color: #fff3d6;
     text-align: center;
     padding: 0.5rem;
+  }
+  .sheet {
+    position: fixed;
+    left: 0.75rem;
+    right: 0.75rem;
+    bottom: 0.75rem;
+    z-index: 20;
+    max-width: 30rem;
+    margin: 0 auto;
+    background: #1c2a23;
+    border: 1px solid rgb(255 255 255 / 0.15);
+    border-radius: 0.9rem;
+    padding: 0.9rem 1rem;
+    box-shadow: 0 0.5rem 2rem rgb(0 0 0 / 0.5);
+  }
+  .sheet p {
+    margin: 0 0 0.6rem;
+  }
+  .sheet.claim {
+    border-color: var(--accent);
+  }
+  .row {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
   }
   .toast {
     position: fixed;

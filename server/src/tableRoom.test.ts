@@ -262,3 +262,34 @@ describe('screen layouts', () => {
     await tv.room.leave();
   });
 });
+
+describe('rejoining without a token', () => {
+  it('lets a new device take over a disconnected seat once an admin approves', async () => {
+    const tv = await Tester.create();
+    tv.room.send('admin', { type: 'make-screen' });
+    await tv.until(() => tv.latest.room!.you.role === 'screen');
+    const sam = await Tester.join(tv.code, { name: 'Sam' });
+    const jo = await Tester.join(tv.code, { name: 'Jo' });
+    tv.room.send('admin', { type: 'start' });
+    await jo.until(() => jo.latest.view !== undefined);
+    const joSeat = jo.latest.room!.you.seat!;
+
+    // Jo's phone loses its connection and its saved token (e.g. a private tab).
+    jo.room.reconnection.enabled = false;
+    (jo.room.connection as unknown as { close: (code: number) => void }).close(4999);
+    await tv.until(() => tv.latest.room!.participants.some((p) => p.name === 'Jo' && !p.connected));
+
+    const again = await Tester.join(tv.code, { name: 'Jo' });
+    expect(again.latest.room!.you.seat).toBeUndefined();
+    const old = again.latest.room!.participants.find((p) => p.seat === joSeat)!;
+    again.room.send('claim', { participant: old.id });
+    await tv.until(() => (tv.latest.room!.claims ?? []).length === 1);
+    expect(sam.latest.room!.claims).toBeUndefined(); // only admins see requests
+
+    tv.room.send('admin', { type: 'approve-claim', participant: again.room.sessionId });
+    await again.until(() => again.latest.room!.you.seat === joSeat);
+    expect(again.latest.room!.participants.filter((p) => p.name === 'Jo')).toHaveLength(1);
+    await again.until(() => again.latest.view !== undefined);
+    await Promise.all([tv, sam, again].map((t) => t.room.leave()));
+  });
+});

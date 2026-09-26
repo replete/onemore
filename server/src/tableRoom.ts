@@ -55,6 +55,8 @@ interface Participant {
   joinOrder: number;
   reconnection?: Deferred<Client>;
   layout?: string;
+  /** Id of the disconnected participant whose seat this one is asking for. */
+  claiming?: string;
 }
 
 type Game = GameModule<unknown>;
@@ -88,9 +90,15 @@ export class TableRoom extends Room {
     activeCodes.add(this.code);
     this.roomId = this.code;
 
+    // Clock sync and heartbeat (D-033): answer at once with the server's time.
+    this.onMessage('ping', (client, message: unknown) => {
+      const t = (message as { t?: unknown })?.t;
+      if (typeof t === 'number') client.send('pong', { t, server: Date.now() });
+    });
     this.onMessage('act', (client, message: unknown) => this.onAct(client, message));
     this.onMessage('admin', (client, message: unknown) => this.onAdmin(client, message));
     this.onMessage('name', (client, message: unknown) => this.onName(client, message));
+    this.onMessage('claim', (client, message: unknown) => this.onClaim(client, message));
     this.clock.setInterval(() => this.checkAdmins(), 10_000);
     this.checkEmpty(); // a room nobody ever joins still gets cleaned up
   }
@@ -227,6 +235,18 @@ export class TableRoom extends Room {
         for (const q of screens) q.layout = cmd.layout;
         return this.refreshAll();
       }
+      case 'approve-claim':
+      case 'deny-claim': {
+        const from = this.participants.get(cmd.participant);
+        const target = from?.claiming ? this.participants.get(from.claiming) : undefined;
+        if (!from || !target) return this.fail(client, 'That request has gone.');
+        delete from.claiming;
+        if (cmd.type === 'approve-claim') {
+          if (target.connected) return this.fail(client, `${target.name} is connected again.`);
+          this.transferSeat(target, from);
+        }
+        return this.refreshAll();
+      }
       case 'skip': {
         if (!this.match) return;
         const decision = this.game.decisions(this.match).find((d) => d.seats.length === 1 && d.seats[0] === cmd.seat);
@@ -244,6 +264,29 @@ export class TableRoom extends Room {
     if (!p || typeof name !== 'string') return;
     p.name = cleanName(name);
     this.refreshAll();
+  }
+
+  /** "Are you Sam?": an unseated player asks to take over a disconnected seat (D-026). */
+  private onClaim(client: Client, message: unknown): void {
+    const p = this.participants.get(client.sessionId);
+    const targetId = (message as { participant?: unknown })?.participant;
+    const target = typeof targetId === 'string' ? this.participants.get(targetId) : undefined;
+    if (!p || p.seat || p.role !== 'player') return this.fail(client, 'You already have a seat.');
+    if (!target || target.connected || !target.seat) return this.fail(client, 'That seat isn’t free.');
+    p.claiming = target.id;
+    this.refreshAll();
+  }
+
+  /** Gives `from` the seat, name and admin rights of `target`, and releases `target` for good. */
+  private transferSeat(target: Participant, from: Participant): void {
+    from.seat = target.seat!;
+    from.name = target.name;
+    from.admin = from.admin || target.admin;
+    from.role = 'player';
+    from.joinOrder = target.joinOrder;
+    from.autoplay = false;
+    target.reconnection?.reject();
+    this.participants.delete(target.id);
   }
 
   // --- Game ----------------------------------------------------------------------
@@ -356,6 +399,13 @@ export class TableRoom extends Room {
         participants,
       };
       if ((p.admin || p.role === 'screen') && this.phase === 'lobby') message.adminCode = this.adminCode;
+      if (p.admin) {
+        const claims = [...this.participants.values()].flatMap((q) => {
+          const target = q.claiming ? this.participants.get(q.claiming) : undefined;
+          return target ? [{ from: q.id, fromName: q.name, target: target.id, targetName: target.name }] : [];
+        });
+        if (claims.length) message.claims = claims;
+      }
       client.send('room', message);
     }
   }
@@ -435,6 +485,7 @@ function info(p: Participant): ParticipantInfo {
   const out: ParticipantInfo = { id: p.id, name: p.name, role: p.role, admin: p.admin, connected: p.connected };
   if (p.seat) out.seat = p.seat;
   if (p.role === 'screen' && p.layout) out.layout = p.layout;
+  if (p.claiming) out.claiming = p.claiming;
   return out;
 }
 

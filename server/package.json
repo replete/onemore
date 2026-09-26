@@ -12,13 +12,15 @@
     "typecheck": "tsc -p ."
   },
   "dependencies": {
+    "@onemore/carcass-eon": "workspace:*",
     "@onemore/engine": "workspace:*",
     "@onemore/twenty-one": "workspace:*",
     "colyseus": "^0.18.8",
-    "@onemore/carcass-eon": "workspace:*"
+    "express": "^5.2.1"
   },
   "devDependencies": {
     "@colyseus/sdk": "^0.18.4",
+    "@types/express": "^5.0.6",
     "tsx": "^4.23.15"
   }
 }

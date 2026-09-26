@@ -21,6 +21,16 @@ export interface ParticipantInfo {
   connected: boolean;
   /** Screens only: the layout an admin chose for this screen (D-020). */
   layout?: string;
+  /** Asking to take over this participant's seat ("Are you Sam?", D-026). */
+  claiming?: string;
+}
+
+/** A request to take over a disconnected player's seat, shown to admins (D-026). */
+export interface Claim {
+  from: string;
+  fromName: string;
+  target: string;
+  targetName: string;
 }
 
 /** Sent to each client whenever the room itself changes. */
@@ -37,6 +47,8 @@ export interface RoomMessage {
   participants: ParticipantInfo[];
   /** Only for admins and screens, and only before the game starts (D-020). */
   adminCode?: string;
+  /** Only for admins: pending requests to take over a seat. */
+  claims?: Claim[];
 }
 
 /** Sent to each client after every change to the game. */
@@ -50,6 +62,15 @@ export interface ViewMessage<V = unknown> {
   /** Absent players the game is waiting on, and when their grace period ends (server time, ms). */
   waiting: { seat: SeatId; until: number }[];
   serverTime: number;
+}
+
+/** Clock sync (D-033): the client sends its own timestamp; the server echoes it with its time. */
+export interface PingMessage {
+  t: number;
+}
+export interface PongMessage {
+  t: number;
+  server: number;
 }
 
 export interface ActMessage {
@@ -67,6 +88,8 @@ export type AdminCommand =
   | { type: 'make-admin'; participant: string }
   | { type: 'remove'; participant: string }
   | { type: 'skip'; seat: SeatId }
+  | { type: 'approve-claim'; participant: string }
+  | { type: 'deny-claim'; participant: string }
   /** Sets the layout of one screen, or of every screen if no participant is given. */
   | { type: 'screen-layout'; layout: string; participant?: string };
 

@@ -19,14 +19,15 @@
 
 Gaps left in the walking skeleton:
 
-- [ ] Lost tokens: "Are you Sam? Rejoin", approved by an admin (D-026).
+- [x] Lost tokens: "Are you Sam? Rejoin", approved by an admin (D-026).
 - [ ] Mirror the reconnect token in an HttpOnly cookie (D-026).
-- [ ] Clock sync over app-level pings, which also serve as the heartbeat for connections that have quietly died. The server tracks each client's round trip. Countdowns are drawn from absolute deadlines (D-026, D-033).
+- [x] Clock sync over app-level pings, which also serve as the heartbeat for connections that have quietly died (D-026, D-033).
+- [ ] Server-measured round trips per client, for fair first-response tie-breaks (D-032).
 - [ ] Jittered exponential backoff on reconnect, so a server restart doesn't cause a reconnection storm (research 06).
 - [ ] Rate-limit code lookups per IP address (D-027, architecture §2).
 - [ ] HTTPS for LAN play, so the screen wake lock works (mkcert or a tunnel).
 - [ ] Late joiners: take a seat at the next round rather than only when the game starts.
-- [ ] The server serves the built client, so one process runs everything.
+- [x] The server serves the built client, so one process runs everything (`pnpm start`).
 
 Then:
 
@@ -53,6 +54,7 @@ Then:
 
 ## Done
 
+- [x] 2026-09-26 Reliability: clock sync and a heartbeat, "Are you Sam? Rejoin" with admin approval, and a single-process production mode (`pnpm start`), tested in Chrome.
 - [x] 2026-09-26 Game events reach clients, filtered per viewer (`eventsFor`, `visibleTo`), and are covered by the leak tests. Carcass Eon announces scoring and supports screen layouts. A full 71-tile game was played in Chrome.
 - [x] 2026-09-26 Carcass Eon is playable: a game picker and options in the lobby (phone and shared screen), a board with pan and zoom, tile placement with preview and rotation, and follower spots. Tested end to end in Chrome with a TV and two phones.
 - [x] 2026-09-26 Carcass Eon scope decided (D-039): medieval theme, classic tiles, 2–5 players, Farmers on by default.
