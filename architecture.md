@@ -22,19 +22,35 @@
 
 The server has two layers:
 
-- **Room layer.** Everything to do with people and connections: rooms, roles, timers, the action log, and sending views out.
+- **Room layer.** Everything to do with people and connections: rooms, roles, timers, the action log, and sending views out. It's built on Colyseus rooms with Colyseus's state sync turned off, behind a thin adapter (D-025).
 - **Rules execution.** Calls into pure rules modules, which know nothing about connections, clocks or storage.
 
 ### Rooms and roles
 
-- **Room.** One game session. It's identified by a Google Meet–style code such as `abc-def-ghi` (D-011), and the screen shows its link, `https://<host>/abc-def-ghi`, as a QR code. A room holds its participants, the chosen game and options, and the game state.
-- **Participants** join through the room link and choose a role (D-009):
-  - **Player:** takes a seat and gets a private view on their phone.
-  - **Screen:** a view-only device (TV, tablet or laptop) showing the public table. A room can have several. An interactive tablet mode, where players can also touch the screen, comes later.
+- **Room.** One game session. It's identified by a Google Meet–style code such as `kfp-nwt-hdz`, made of 19 consonants (D-011, D-027). The screen shows its link, `https://<host>/kfp-nwt-hdz`, as a QR code, with the code underneath. A room holds its participants, the chosen game and options, and the game state.
+- **Participants** (D-009, D-020):
+  - **Player:** anyone who joins through the room link. Takes a seat and gets a private view on their phone.
+  - **Screen:** a view-only device (TV, tablet or laptop) showing the public table. Admins choose which devices are screens: an admin can make their own device the shared screen ("Make this the shared screen"), or turn any connected client into one. A room can have several. An interactive tablet mode, where players can also touch the screen, comes later.
   - **Spectator:** watches the public view from anywhere through a separate spectator link, if an admin has opened one.
-- **Admin** is a flag on a participant, not a separate role. The creator is admin by default and can make others admins. Admins choose the game and options, start it, lock the room, remove participants, set the absence policy (D-010), open spectating and control screens.
-- **Screen commands.** Admins can send presentation commands to screens, such as "follow a player" or "zoom" (the full set is TBD). They change what a screen shows, not the game, so they don't go through the rules or the action log.
+- **Admin** is a flag on a participant, not a separate role (D-020):
+  - The creator starts as admin, and admins can make others admins.
+  - A separate **admin QR code** joins whoever scans it as an admin. The shared screen shows it on the join screen before the game starts, and that's how a TV that created a room hands control to a phone. During the game, admins are marked on every screen.
+  - If no admin is connected for 2 minutes, admin passes to the player who has been connected longest (D-026).
+  - Admins see **Start game**, **Game options** and **Make this the shared screen**. They can also lock the room, remove participants, set the absence policy (D-010), open spectating and control screens.
+- **Lobby approval.** An optional room setting (D-020): admins approve each person before they join.
+- **Screen commands.** Admins control each screen's **layout**, and each game defines which layouts it offers (D-020). Layout changes what a screen shows, not the game, so screen commands don't go through the rules or the action log.
 - **Seat token.** Every participant gets a random secret, stored in the browser, so they get the same seat and role back when they reconnect after their phone sleeps.
+
+### Connections and absence
+
+Phones drop their connection all the time. iOS closes the WebSocket as soon as the screen locks, and Android freezes background pages within 1–5 minutes (research 03). So we design for the connection dying, not for keeping it alive (D-026).
+
+- **Seats are held for the whole game.** Leaving means saying so or being removed.
+- **The game doesn't wait long.** When a decision is waiting on an absent player, everyone sees that they're reconnecting. After a **60-second grace period**, the game plays that decision's default action (in 21, *stand*). Their later decisions are auto-played straight away until they return. Admins can skip, end a timer early or change the policy at any time.
+- **Reconnecting is immediate.** The client reconnects as soon as the page is visible again (`visibilitychange`, `pageshow` with `persisted`, `resume`, `online`), using its token from localStorage or an HttpOnly cookie. It doesn't wait for `onclose`, and an app-level heartbeat catches connections that have quietly died.
+- **Lost tokens.** Without a token (private tabs, the iOS Code Scanner), the player sees "Are you Sam? Rejoin", and an admin approves it.
+- **Keeping screens on.** Phones request a screen wake lock after the first tap and again whenever the page becomes visible. If the lock is refused, they fall back to a "keep your screen on" hint.
+- **Rooms outlive their players briefly.** A shared screen dropping doesn't pause anything, and an empty room is kept for 15 minutes.
 
 ### Server loop
 
@@ -54,17 +70,17 @@ That's the whole game loop. When a timer expires, it enters the same loop as a s
 
 ### Protocol sketch
 
-JSON over WebSocket, and every message has a `type`.
+Messages travel as Colyseus room messages (MessagePack over WebSocket), and every message has a `type`. Colyseus handles joining and reconnection itself (`joinById`, reconnection tokens), so `hello` and `welcome` below are conceptual.
 
 - Client → server:
   - `hello {room, seatToken?, protocol}`
-  - `join {as: player|screen|spectator, name?}`
-  - `act {rev, action}`
+  - `join {name?, adminCode?, spectatorCode?}`
+  - `act {rev, decision, action}`
   - `admin {command}`
   - `ping {clientTime}`
 - Server → client:
   - `welcome {participant, seatToken, role, game, versions}`
-  - `view {rev, view, legalActions, events, deadlines}`
+  - `view {rev, view, decisions, events, deadlines}`
   - `rejected {reason}`
   - `room {participants, status}`
   - `screen {command}`
@@ -83,10 +99,13 @@ The client is untrusted. Assume anyone can open dev tools, edit the JavaScript o
 | Threat | Defence |
 |---|---|
 | Seeing hidden cards (other hands, deck order) | The server never sends them. Views are computed per viewer on the server. |
-| Making illegal moves | The server checks every action against the legal actions. |
+| Making illegal moves | The server only accepts an action if it answers a current pending decision and comes from a seat that decision is waiting on. |
+| Tracking or decoding hidden cards by their ids | Views give hidden components opaque ids, which change when a component is shuffled or moves while hidden (§3.3). |
 | Rigging or predicting shuffles | Randomness only happens on the server. Seeds come from a secure random source and never leave the server, because anyone who knew the seed could predict every shuffle. |
 | Acting as another player | Seat tokens. Actions are only accepted from that seat's own connection. |
-| Joining a room uninvited | Meet-style codes have trillions of combinations, so they can't be guessed. Joins are rate-limited anyway, and admins can lock the room and remove participants. |
+| Joining a room uninvited | Meet-style codes have about 3 × 10^11 combinations, so they can't be guessed. Code lookups are rate-limited per IP address anyway, which is what stopped Jackbox's codes being brute-forced (research 03). Admins can lock the room, remove participants, or turn on lobby approval. |
+| Offensive names or codes | Names have a length limit and a profanity filter, and admins can remove players. Codes contain no vowels, and a blocklist catches anything left. |
+| Becoming an admin uninvited | The admin QR code carries a separate code from the room. It's only shown on the shared screen's join screen before the game starts. During the game, admins are marked, so everyone can see who they are. |
 | Spectators taking seats | The spectator link uses a different code from the room. |
 | Players showing each other their phones | Not our problem, same as with real cards. |
 
@@ -94,7 +113,7 @@ About everyone needing the same package: pinning versions keeps clients **compat
 
 ## 3. The game model
 
-This is the hard, interesting part, and the part we'll revise most.
+This is the hard, interesting part, and the part we'll revise most. [Research 01](research/01-game-modelling-result.md) surveyed how other systems model games. Its main lesson: share the *substrate* (components, zones, turn machinery, views, logs), and write each game's rules as code on top of it.
 
 ### 3.1 The engine contract
 
@@ -105,32 +124,44 @@ interface GameModule<State, Action> {
   id: string;                                       // "twenty-one"
   version: string;
   setup(ctx: SetupContext): State;                  // seats, options, content, rng
-  legalActions(state: State, seat: SeatId): Action[];
-  apply(state: State, action: Action, ctx: ApplyContext): { state: State; events: GameEvent[] };
+  decisions(state: State): PendingDecision[];       // who must decide what, right now (§3.4)
+  apply(state: State, by: SeatId | "system", action: Action, ctx: ApplyContext): { state: State; events: GameEvent[] };
   view(state: State, viewer: Viewer): View;         // what this seat, screen or spectator may see
-  timers(state: State): Timer[];                    // durations only, e.g. { id: "respond", ms: 5000 }
   outcome(state: State): Outcome | null;            // null while the game is in progress
 }
+
+interface PendingDecision {
+  id: string;
+  seats: SeatId[];                                  // who it's waiting on
+  mode: "one" | "each" | "any";                     // one seat / every seat answers / first answer wins
+  prompt: Prompt;                                   // the typed choices (§3.5)
+  blocking: boolean;                                // false = play carries on around it (D-023)
+  timerMs?: number;                                 // a duration, never a clock time
+}
 ```
+
+The server only accepts an action if it answers one of the current pending decisions and comes from a seat that decision is waiting on (D-018).
 
 It has four properties:
 
 - **Deterministic.** The same seed and the same actions always produce the same game. All randomness goes through the RNG passed in by the engine.
 - **Pure.** No I/O, no clocks, no globals. That makes it easy to test, to replay and to run anywhere.
-- **Plain data.** State, actions, views and events are JSON-serialisable data, with no classes, functions, Maps or Dates. That's what lets them be stored, sent over the wire and replayed.
-- **Events alongside state.** `apply` also returns what happened ("seat 2 drew a card", "7♥ moved from hand to pile") so clients can animate it. Events are redacted per viewer, just like views: others see "Sam drew a card", Sam sees "you drew the 7♥".
+- **Plain data.** State, actions, views and events are JSON-serialisable data, with no classes, functions, Maps or Dates. That's what lets them be stored, sent over the wire and replayed. Actions refer to components by id, never by object. Research 01 found that holding object references in actions was the most common mistake in one framework (TAG).
+- **Events alongside state.** `apply` also returns what happened ("seat 2 drew a card", "7♥ moved from hand to pile") so clients can animate it. Events are redacted per viewer, just like views: others see "Sam drew a card", Sam sees "you drew the 7♥". Events can nest cause and effect, like Hearthstone's blocks ("Sam played a spell → it hit the dragon → the dragon died"), so clients can put animations in order.
 
-This shape is deliberately close to boardgame.io, OpenSpiel and Board Game Arena (research 01).
+This shape is close to boardgame.io, OpenSpiel, TAG and Board Game Arena.
 
 ### 3.2 Vocabulary
 
-- **Component.** A physical-ish thing: a card, tile, piece, token or die. It has a *definition* (what it is, e.g. "7 of hearts" or "road-city tile") and *instances* (this particular copy, with its own id).
-- **Zone.** Where components live: deck, hand, discard pile, tableau, board cell, bag or supply. A zone has an owner (a seat, or none), is ordered or unordered, and has a visibility (§3.3).
-- **Board.** A zone with geometry: a square grid, a hex grid, a graph of spaces, or an unbounded grid that grows as tiles are laid.
+- **Component.** A physical-ish thing: a card, tile, piece, token or die. It has a *definition* (what it is, e.g. "7 of hearts" or "road-city tile") and *instances* (this particular copy). An instance is `{ id, defId, zone, owner, props }`. The zone it's in is just another property, as in Hearthstone's model, and `props` holds game-specific values such as face up, damage or rotation.
+- **Zone.** Where components live: deck, hand, discard pile, tableau, bag or supply. A zone has an owner (a seat, or none), is ordered or unordered, and has a visibility (§3.3).
+- **Board and sites.** A board is a graph of **sites**: squares, hexes, spaces on a track, or places a tile could go. A growing map, as in tile laying, is a board whose sites become playable as tiles are placed (Ludii works this way).
 - **Seat / player.** A participant who plays.
 - **Viewer.** Anyone who gets a view: a player's seat, or the public view shown to screens and spectators.
-- **Turn / phase / step.** The structure of play (§3.4).
-- **Action.** Something a seat may do: `{ type, component?, from?, to?, params? }`.
+- **Phase / turn / step.** The overall shape of play (§3.4).
+- **Pending decision.** A choice the game is waiting on: who can make it, what the choices are, and whether there's a timer (§3.4).
+- **Prompt.** The typed form of a decision's choices, such as "pick one of these cards" or "place this tile on one of these sites" (§3.5).
+- **Action.** An answer to a pending decision.
 - **System action.** An action submitted by the room layer rather than a seat, e.g. `timeout`.
 - **Event.** Something that happened, used for animation and logs.
 - **View.** The redacted state for one viewer.
@@ -159,38 +190,61 @@ Screens and spectators get the public view, and each phone gets its own seat's v
 
 Game-specific exceptions (peeking, or showing a card to one player) use a "known to" set on the instance, which the view function respects.
 
-### 3.4 Flow: turns, interrupts and timers
+Hidden information can also leak in less obvious ways (research 01):
 
-Flow is modelled as a state machine, like Board Game Arena's. Each state says who is active and which action types are allowed. The common shapes are:
+- **Ids leak.** If the ids clients see never change, a card can be tracked after it's hidden again. If ids follow deck order, anyone can work out a hidden card from its id. So views give hidden components opaque ids, and those ids change whenever the component is shuffled or moves while hidden. Hearthstone has `HIDE_ENTITY` for the same reason.
+- **Deck order is a secret too**, not just the cards themselves.
+- **Test, don't trust.** Property tests check that no message sent to a viewer contains something that viewer shouldn't see, such as an opponent's hand, the deck order or the seed. The tests cover every message type, including the first sync and replayed logs, not just views. boardgame.io leaks the whole starting state through its sync message ([research 07](research/07-boardgame-io-result.md)).
 
-- **Strict turn order.** Most games.
-- **Simultaneous.** Everyone acts, and the state moves on once they all have (Shithead's opening swap, drafting, bidding).
-- **Out-of-turn interrupts** (D-013). During a **response window**, players who aren't active get legal actions too, such as burning the pile, "Snap!" or a counter-spell. The window closes when every eligible player has passed or when its timer runs out.
+### 3.4 Flow: phases, pending decisions and timers
+
+Flow has two layers, as in most of the engines research 01 looked at (D-017):
+
+- **Phases, turns and steps** form a state machine for the overall shape of the game: deal, play, score, and whose turn it is.
+- **A stack of pending decisions** says who must decide what, right now. The stack lives in the game state. When a decision is answered, the game can push more decisions on top, such as "choose a target" after "play this card", or "everyone else discards one" in the middle of someone's turn. When those are resolved, play carries on underneath.
+
+That one mechanism covers the common shapes of play:
+
+- **Strict turn order:** one `one` decision at a time, for the active player.
+- **Simultaneous play:** an `each` decision (Shithead's opening swap, drafting, bidding).
+- **Out-of-turn interrupts** (D-013, D-023) come in two kinds:
+  - **Non-blocking (the default).** An `any` decision that sits alongside the normal turn instead of on top of it. Play doesn't pause, and the first valid claim wins. This covers "Snap!", and cut-ins and burns in Shithead. Prompts are private and nothing on the shared screen changes, so nobody learns who could have responded.
+  - **Blocking windows**, only where the rules need a pause, such as counter-spells. Whether one opens depends only on public information: it opens for every eligible seat, whether or not they hold a response. It runs for a fixed, short time and closes early only if everyone passes by hand. There's no auto-pass unless a game opts in.
+- **Chains of effects:** responses to responses stack up and resolve in order, like Magic's stack.
+
+The references are TAG's `IExtendedSequence` stack, BGA's `MULTIPLE_ACTIVE_PLAYER` states, boardgame.io's stages, and Hearthstone's blocks.
 
 **Timers** (D-013):
 
-- Rules modules never read a clock (D-007). They declare timers as durations through `timers(state)`, and the room layer arms and cancels them as those timers appear and disappear.
-- When a timer expires, the room layer submits a system `timeout` action, which is applied and logged like any other action. Replays read timeouts from the log, not the clock, so they stay deterministic.
+- Rules modules never read a clock (D-007). A pending decision declares its timer as a duration. The room layer arms the timer when the decision appears and cancels it when the decision goes away.
+- When a timer expires, the room layer submits a system `timeout` action for that decision, which is applied and logged like any other action. Replays read timeouts from the log, not the clock, so they stay deterministic.
 - Deadlines go to clients as absolute server times. Clients correct for their clock offset (from `ping`/`pong`), so every device shows the same countdown.
-- If two interrupts race, the first valid one to reach the server wins, and the log fixes the order.
+- If two answers to an `any` decision race, the first valid one wins, and the log fixes the order. With **Fair first-response** on (D-022), the server orders answers by arrival time minus each client's estimated latency. The compensation is capped at around 150 ms, the estimate uses a low percentile of recent pings, and the server waits for the length of the cap before deciding.
 
-Two problems are still open (research 05):
+Research 05 may refine fair first-response and the timing of response windows.
 
-- **Fairness.** In reaction races, players with lower latency have an edge.
-- **Information leaks.** A window that opens only when someone *could* respond tells everyone that someone can.
+### 3.5 Prompts and the UI
 
-### 3.5 Legal actions and the UI
+This is how the UI stays separate from the rules (D-005). With each view, the server sends each seat the pending decisions waiting on it, as typed prompts (D-018). The client knows no rules. It only knows how to present each kind of prompt:
 
-This is how the UI stays separate from the rules (D-005). With each view, the server sends that seat's legal actions. The client knows no rules. It maps the legal actions onto what's on screen:
+| Prompt | What the player does | Example |
+|---|---|---|
+| `pick` | Choose one component, by tapping it or dragging it to a target | Play a card from your hand onto the pile |
+| `pickN` | Select between `min` and `max` components, then confirm | Discard 3 of 6; play a set of cards of equal rank |
+| `place` | Drag a component onto one of the highlighted sites | Lay a tile; move a piece |
+| `choose` | Tap a button | Hit or stand; pass; bet 10 |
 
-- When a card is picked up or dragged, highlight every zone or component that's a `to` target of a legal action involving that card.
-- When it's dropped on a target and exactly one legal action matches (component plus target), send that action. If several match (e.g. play as an attack or discard), show a small chooser.
-- A gesture with no target, like flicking a card up to play it, sends the single "play this card" action if there is exactly one.
-- Actions that don't involve a component (pass, stick, bet 10) become buttons.
-- If a card has no legal actions, it can't be dragged. Illegal moves don't get rejected; the UI gives you no way to make them.
-- Out-of-turn plays work the same way. During a response window, a phone whose player isn't active simply has legal actions.
+On the phone, that looks like this:
 
-**Big action spaces** (D-012). Legal actions are listed in full by default. When a game has too many to list (choosing any subset of six cards is already 63), it returns action templates with constraints instead ("choose 1–3 cards of equal rank"), and the server validates what comes back. We build templates when a real game needs them.
+- Dragging a card highlights every target it could go to under the current prompts. Dropping it on a target sends that choice. If more than one choice matches (e.g. play as an attack or discard), a small chooser appears.
+- A gesture with no target, like flicking a card up to play it, sends the single "play this card" choice if there is exactly one.
+- A card with no choices can't be dragged. Illegal moves don't get rejected; the UI gives you no way to make them.
+- Out-of-turn plays work the same way. During a response window, a phone whose player isn't active simply has a prompt.
+
+**Big choice spaces** (D-018). Small sets of choices are listed in full. Big ones are handled in one of two ways, both of which research 01 found in use (TAG, Dominion AIs, RLCard):
+
+- a `pickN` prompt with constraints ("1–3 cards of equal rank"), where the server validates the answer when it arrives;
+- splitting the choice into a sequence of smaller decisions. For example, Carcassonne placement becomes "pick a site", then "pick a rotation".
 
 Games can ship custom renderers for special pieces, but the generic renderer should be able to play any game: ugly, but correct.
 
@@ -201,13 +255,27 @@ A room is fully described by its rules version, content version, options, seats,
 - rebuild any room after a server restart (D-014);
 - replay a bug exactly ("send us the log");
 - write tests as scripts of actions;
-- later, add undo (where the game allows it), spectator replays and bots.
+- later, add spectator replays, undo and bots.
 
-Research 04 informs the choice of seeded RNG and shuffle. Saved replays (a seed, actions and the expected views) double as regression tests.
+Research 01 suggests some rules for the later features:
+
+- **Undo** means replaying the log up to an earlier point. It's only safe back to the last moment when hidden information was revealed or randomness was used.
+- **Bots** only see the view of the seat they play for. If they simulate ahead, they use their own random seed, so they can't learn about upcoming shuffles.
+- **Replays** need the exact rules and content versions. Rooms already pin both.
+
+Randomness (D-024, proposed until research 04 confirms it):
+
+- **Seed:** 256 bits from the operating system's secure random source, one seed per room, never sent to clients.
+- **Generator:** ChaCha20 keyed by the seed, from `@noble/ciphers`, with a separate stream for each purpose.
+- **Shuffle:** Fisher–Yates, drawing unbiased integers by rejection sampling.
+
+Saved replays (a seed, actions and the expected views) double as regression tests.
 
 ### 3.7 Rules as code, content as data
 
-Proposed in [D-004](decisions.md#d-004-rules-as-code-content-as-data): rules are TypeScript modules written against a shared engine library, and content (card definitions, decks, tiles) is data. There's no rules DSL yet. When the same pattern shows up in several games, it becomes a library helper. The first place a small effect language is likely to pay off is authoring card effects at volume for the collectible family.
+Proposed in [D-004](decisions.md#d-004-rules-as-code-content-as-data): rules are TypeScript modules written against a shared engine library, and content (card definitions, decks, tiles) is data. There's no rules DSL yet.
+
+Research 01 backs this. Every broad declarative rules language it looked at hit firm limits with hidden information, arithmetic or special-effect cards: GDL, Regular Boardgames, Zillions, RECYCLE, and the card game description languages. The engines that cover many games write rules in code, sometimes with a small embedded DSL. So we start with code, and move a pattern into data only once three or more games need it. The first place that's likely to happen is card effects for the collectible family (§4).
 
 ## 4. The three families against the model
 
@@ -221,28 +289,34 @@ Proposed in [D-004](decisions.md#d-004-rules-as-code-content-as-data): rules are
 ### Collectible / deck-building card games
 
 - **Content:** card sets with stats and effects. A deck is a list of card ids validated against a format (e.g. "30 cards, max 2 copies").
-- **Effects as data**, from a small vocabulary:
+- **Data model:** Hearthstone's is the proven reference. Every card, player and the game itself is an entity with integer tags, and even the zone a card is in is just a tag.
+- **Effects as data:** a small vocabulary of actions and selectors, as in Fireplace (`Hit(ENEMY_MINIONS, 4)`):
   - triggers: on play, on death, start of turn;
   - selectors: any enemy minion, a random friendly;
   - effects: damage, heal, draw, summon, buff.
 
-  Unique cards can escape to code.
-- **The hard part is resolution order,** where triggers cause more triggers. It needs an explicit effect queue or stack with defined ordering. Hearthstone's entity-with-tags model and Forge/XMage are the references.
+  Triggers are written in the same vocabulary as the actions they listen for. Unique cards can escape to code.
+- **Resolution order is the hard part.** Research 01 found that event ordering causes the most pain and bugs in these engines. MTG Arena's approach is the one to copy:
+  - each event is proposed first;
+  - card rules can then modify, replace or prevent it;
+  - then it executes, and the triggers it caused are collected.
+
+  Continuous effects (buffs, auras) are recomputed from scratch in a fixed order of layers, not patched incrementally.
 - Deck building and collections mean saved decks at least, and eventually accounts. That comes later.
 
 ### Board games
 
 - **Content:** fixed boards or placed tiles, plus pieces and tokens.
-- **Geometry:** square and hex grids, graphs of spaces, unbounded placement grids.
+- **Geometry:** a board is a graph of sites (§3.2), which covers square and hex grids, spaces on a track, and growing maps whose sites become playable as tiles are laid.
 - **Carcassonne-like tile laying:**
   - Tiles have typed edges (road, city, field) and features that span several tiles.
   - A placement is legal if its edges match the neighbouring tiles.
   - Scoring tracks features as they merge across tiles and completes them (union-find over feature segments).
-  - The server sends legal placements, which show as ghost positions on the screen and on the phone.
+  - Placement is two decisions: pick a site, then a rotation. The possible sites show as ghost positions on the screen and on the phone.
 - **The shared screen shines here.** The board lives on the TV, and an admin can have it follow the active player. Each phone shows your tile, your pieces and a zoomed-in placement view.
 
 ## 5. Technology
 
-We're using TypeScript on both server and client for now (D-008).
+We're using TypeScript on both server and client (D-008). The room layer runs on Colyseus with its state sync turned off (D-025, [research 08](research/08-colyseus-result.md)). The engine doesn't depend on Colyseus.
 
 **Persistence** (D-014): rooms live in memory to start with, and action logs are appended to disk. A store that survives restarts comes later (research 06).

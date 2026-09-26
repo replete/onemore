@@ -10,13 +10,8 @@
 
 Things we still need to decide. Each one becomes a D-entry once it's decided.
 
-- A room created on a TV makes the TV its admin, but TVs are bad at input. How does admin control get to a phone: an admin QR code on the screen, or the first phone to join? (research 03)
-- Which commands can admins send to screens: follow a player, zoom, layout, anything else? (D-009)
-- What's the grace period, and what's each game's default absence policy? (D-010, research 03)
-- Which ruleset and variants for 21: casino Blackjack, Pontoon or home rules? Is the dealer the server or a player? Chips or no chips? Claude drafts these from existing variants; no deep research needed. (D-015)
-- How do we keep reaction races (e.g. "Snap!") fair given network latency? (D-013, research 05)
-- How do we open response windows without revealing that someone is able to respond? (D-013, research 05)
-- Which PRNG and shuffle? (D-007, research 04)
+- Does fair first-response (D-022) hold up in testing? What are the right compensation cap and latency estimate? Research 03 didn't cover this. Research 05 might, and otherwise we find out by testing.
+- Which card games come after 21 and Shithead? (research 02)
 
 ---
 
@@ -61,7 +56,7 @@ Things we still need to decide. Each one becomes a D-entry once it's decided.
 
 ## D-004 Rules as code, content as data
 
-**Status:** Proposed
+**Status:** Accepted, 2026-09-26
 
 **Context:** The goal is to make games easy to build. There are two options:
 
@@ -74,13 +69,15 @@ A DSL is powerful, but it's a big project in its own right, and designing one be
 
 **Consequences:** Game authors have to be programmers for now, but we get to a first game faster. Revisit after about three games.
 
+**Research:** [research 01](research/01-game-modelling-result.md) supports this. Every broad declarative rules language it looked at (GDL, Regular Boardgames, Zillions, RECYCLE) hit firm limits with hidden information, arithmetic or special-effect cards. The engines that cover many games write rules in code, sometimes with a small embedded DSL.
+
 ## D-005 Clients are rules-agnostic; server sends legal actions
 
-**Status:** Proposed
+**Status:** Accepted, 2026-09-26
 
 **Context:** The UI needs to know where a dragged card can go. Duplicating the rules on the client would cause drift and bugs.
 
-**Decision:** With every view, the server sends that seat's legal actions. The client turns them into drag targets, buttons and choosers, and never evaluates rules itself. See [architecture §3.5](architecture.md#35-legal-actions-and-the-ui).
+**Decision:** With every view, the server sends that seat's legal actions. The client turns them into drag targets, buttons and choosers, and never evaluates rules itself. See [architecture §3.5](architecture.md#35-prompts-and-the-ui).
 
 **Consequences:**
 
@@ -88,9 +85,11 @@ A DSL is powerful, but it's a big project in its own right, and designing one be
 - Games with huge action spaces need action templates (D-012).
 - Game-specific renderers are optional polish.
 
+**Research:** [research 01](research/01-game-modelling-result.md) supports this. Hearthstone's server sends "Options" with their targets, so whether a card can be played "is entirely determined by the server". OpenSpiel, TAG and PettingZoo all expose an explicit list of legal actions. D-018 proposes the form these take.
+
 ## D-006 Build concrete games before generalising
 
-**Status:** Proposed
+**Status:** Accepted, 2026-09-26
 
 **Context:** The value is in the reusable engine, which makes it tempting to design the engine first.
 
@@ -98,9 +97,11 @@ A DSL is powerful, but it's a big project in its own right, and designing one be
 
 **Consequences:** Early code will contain duplication, and that's expected. [architecture.md](architecture.md) records patterns as they emerge.
 
+**Research:** [research 01](research/01-game-modelling-result.md) found the same thing. CardStock's authors wrote that "many of our earlier choices for the language proved to be ad-hoc and unable to generalize". The report recommends promoting a pattern into shared machinery only once three or more games need it.
+
 ## D-007 Deterministic engine: seed + action log
 
-**Status:** Proposed
+**Status:** Accepted, 2026-09-26
 
 **Context:** Multiplayer games with hidden information are hard to debug, and a server restart shouldn't kill live rooms.
 
@@ -112,6 +113,8 @@ A DSL is powerful, but it's a big project in its own right, and designing one be
 - Cheap persistence.
 - Later: undo, replays and bots.
 - Rules code can only use time, randomness and I/O through the context the engine provides.
+
+**Research:** [research 01](research/01-game-modelling-result.md) supports this. Every system it looked at that covers many games has a seeded, logged stream of actions. Examples are boardgame.io's seed, Ludii's `Trial` and Hearthstone's replay packet stream. Replays also need the exact rules and content versions, and rooms already pin both.
 
 ## D-008 Technology stack
 
@@ -129,7 +132,7 @@ A DSL is powerful, but it's a big project in its own right, and designing one be
 
 ## D-009 Players, screens, spectators and admins
 
-**Status:** Accepted, 2026-09-26
+**Status:** Accepted, 2026-09-26. Partly superseded by D-020: admins now choose which devices are screens.
 
 **Context:** A room has phones playing, one or more shared screens, and possibly remote viewers. Someone has to run it.
 
@@ -182,7 +185,7 @@ A DSL is powerful, but it's a big project in its own right, and designing one be
 
 ## D-012 Legal actions listed in full, templates when needed
 
-**Status:** Accepted, 2026-09-26
+**Status:** Superseded by D-018.
 
 **Context:** Under D-005, the server sends each seat its legal actions. Some games have too many to list: choosing any subset of six cards already gives 63.
 
@@ -251,3 +254,250 @@ A DSL is powerful, but it's a big project in its own right, and designing one be
 Numbers follow the order in which topics were opened. Prompts are broad and stand alone, and they say as little as possible about One More, so the research spends its effort on the topic rather than on our design. Anything we can work out ourselves, such as the rules of 21, doesn't get a prompt.
 
 **Consequences:** Decisions refer to research by number. When a result comes back, we review it and record what it changes here, linking to the result.
+
+## D-017 Flow as phases plus a stack of pending decisions
+
+**Status:** Accepted, 2026-09-26
+
+**Context:** A turn-based state machine alone struggles with several common situations:
+
+- everyone choosing at once;
+- "everyone else discards a card" in the middle of someone's turn;
+- out-of-turn responses (D-013);
+- chains of effects.
+
+[Research 01](research/01-game-modelling-result.md) found that most engines which handle card games add a stack of pending decisions on top of their phases. Examples are TAG's `IExtendedSequence`, BGA's `MULTIPLE_ACTIVE_PLAYER` states, boardgame.io's stages and Hearthstone's blocks.
+
+**Decision:** Flow has two layers. Phases, turns and steps form a state machine for the overall shape of the game. On top of that sits a stack of **pending decisions**, kept in the game state. Each decision has:
+
+- the seats it's waiting on;
+- a mode: `one` (a single seat decides), `each` (every seat answers) or `any` (the first answer wins);
+- a typed prompt (D-018);
+- an optional timer, as a duration.
+
+Answering a decision can push more decisions on top. A decision can also be **non-blocking**: it sits alongside the stack instead of on top, so play carries on around it (D-023). The engine contract replaces `legalActions` and `timers` with `decisions(state)`. See [architecture §3.4](architecture.md#34-flow-phases-pending-decisions-and-timers).
+
+**Consequences:**
+
+- Turn order, simultaneous play, response windows and effect chains all use one mechanism.
+- Timers attach to decisions, so a `timeout` always names the decision it ends.
+- Simple games pay a small cost: 21 is mostly a single `one` decision at a time.
+
+## D-018 Legal actions as typed prompts
+
+**Status:** Accepted, 2026-09-26. Supersedes D-012.
+
+**Context:** Under D-005, the server tells each seat what it can do, and the client turns that into interactions. A flat list of actions leaves the client to work out how to present them, and it breaks down for big choices. [Research 01](research/01-game-modelling-result.md) found two working approaches to big choices:
+
+- typed selection prompts, such as a Dominion AI's `SelectCards(source, min, max)`;
+- splitting a big choice into sequential sub-decisions, such as TAG's advice to treat "discard 3 of 6" as three decisions.
+
+**Decision:** Each pending decision carries a typed prompt:
+
+- `pick`: one component, optionally with a target;
+- `pickN`: between `min` and `max` components, with constraints;
+- `place`: a component onto one of a set of sites;
+- `choose`: one of a set of named options, shown as buttons.
+
+Small sets of choices are listed in full. A big choice uses either `pickN` with constraints, validated on submit, or a sequence of smaller decisions (e.g. Carcassonne: pick a site, then a rotation). The server only accepts an action if it answers a current pending decision and comes from a seat that decision is waiting on. See [architecture §3.5](architecture.md#35-prompts-and-the-ui).
+
+**Consequences:**
+
+- The client needs to handle only four prompt types, whatever the game.
+- New prompt types get added only when a real game needs one.
+
+## D-019 Don't build on boardgame.io
+
+**Status:** Accepted, 2026-09-26
+
+**Context:** boardgame.io is the TypeScript framework closest to our design. [Research 07](research/07-boardgame-io-result.md) evaluated it against our architecture, using its source, its issues and a live test.
+
+**Decision:** Build our own engine and room layer. Borrow boardgame.io's ideas where they fit: phase, turn and stage presets, a single `playerView` projection, `stateID` for stale moves, redacted log entries, and the storage adapter interface.
+
+**Consequences:**
+
+- We avoid its hidden-information leaks, which we confirmed in the live test:
+  - every client, including spectators with no credentials, receives the unfiltered starting state: the deck order, all hands, and the seed and generator state;
+  - the default seed is the match creation time, which the public lobby API returns.
+- We avoid working around a model that lacks prompts, a decision stack and timers.
+- We also avoid depending on a framework whose last release was in November 2022.
+- We have to write the room server, the flow presets and the storage ourselves. For small, turn-based rooms, that's modest work.
+- Lesson for our own design: test *every* message that goes over the wire for leaks, including the first sync, not just views.
+
+## D-020 Admins, shared screens and lobby approval
+
+**Status:** Accepted, 2026-09-26. Updated the same day: the admin QR code and the lobby default.
+
+**Context:** D-009 left two questions open. How does admin control reach a phone when a room is created on a TV? And what can admins do to screens?
+
+**Decision:**
+
+- **Admin controls.** Whoever creates a room starts as its admin. Admins see **Start game**, **Game options** and **Make this the shared screen**.
+- **Shared screens.** An admin can turn their own device into the shared screen, or turn any connected client into one. People joining no longer pick "screen" themselves, which supersedes that part of D-009.
+- **Admin QR code.** A separate admin QR code joins whoever scans it as an admin. The shared screen shows it on the join screen, before the game starts. During the game it isn't shown, and admins are marked as admins, so everyone can see who they are.
+- **Lobby approval.** An optional room setting makes admins approve each person before they join. It's off by default.
+- **Screen commands.** Admins control a screen's **layout**. Each game defines which layouts it offers, with defaults for each family of games.
+
+**Consequences:** The usual flow for creating a room on a TV:
+
+1. Create the room on the TV.
+2. Tap "Make this the shared screen".
+3. Scan the admin QR code with a phone.
+
+Creating a room on a phone and then opening the link on a TV works too: the admin makes the TV the shared screen from their phone.
+
+## D-021 21: server dealer, variations as options
+
+**Status:** Accepted, 2026-09-26
+
+**Context:** D-015 left the 21 variant open.
+
+**Decision:**
+
+- The server is the dealer. A player as dealer can be added later as an option.
+- 21 ships as one base game, with its variations as game options (for example, Pontoon-style rules or chips).
+- Claude writes the rules and the variations from existing games.
+
+**Consequences:** The minimal walking-skeleton version is the base game, without options.
+
+## D-022 Fair first-response
+
+**Status:** Accepted, 2026-09-26, as a direction that still has to be proven in testing.
+
+**Context:** When several players answer the same `any` decision (e.g. "Snap!"), the first answer to reach the server wins (D-013). That favours players with faster connections.
+
+**Decision:**
+
+- **Measure.** The server keeps measuring each client's latency from pings.
+- **Compensate.** When answers arrive close together, the server orders them by arrival time minus each client's estimated one-way latency.
+- **Make it an option.** This is a room option, **Fair first-response**, on by default for games with reaction races.
+
+Claude added three safeguards:
+
+- **Cap the compensation** at around 150 ms. Otherwise a client could gain by faking slow pings.
+- **Estimate latency from a low percentile** of recent round trips, not the average, because phones on Wi-Fi have power-saving spikes.
+- **Wait briefly before deciding.** After the first answer, the server waits for the length of the cap so later answers with more compensation can still win.
+
+**Consequences:**
+
+- Every race takes up to the length of the cap to resolve.
+- We prove it with tests that use Colyseus's simulated latency (research 08) and with real phones. Research 05 may suggest better approaches.
+
+## D-023 Response windows: non-blocking by default
+
+**Status:** Accepted, 2026-09-26
+
+**Context:** A window that opens only when somebody *could* respond tells everyone that somebody can (D-013). But a window after every event slows the game down.
+
+**Decision:**
+
+- **Non-blocking interrupts by default.** Play doesn't pause. The out-of-turn choice is offered alongside the normal turn to every seat that's eligible by public information, and the first valid claim wins (D-022). Prompts are private, and nothing on the shared screen changes, so nobody learns who could have responded. This covers Snap, cut-ins and burns in Shithead, and most casual card games.
+- **Blocking windows only where the rules need a pause,** such as counter-spells in a collectible game. Whether a window opens must depend only on public information. It opens after every event of a type that anything in the game could respond to, for every eligible seat, whether or not they hold a response. It runs for a fixed, short time. It closes early only if every seat has passed by hand.
+- **No auto-pass by default,** because auto-passing reveals who couldn't respond. A game can opt into auto-pass for speed where the leak doesn't matter.
+
+**Consequences:** Pending decisions get a `blocking` flag. Non-blocking decisions sit alongside the stack rather than on top of it (D-017). Research 05 may refine the timings.
+
+## D-024 Randomness: ChaCha20 with a 256-bit seed
+
+**Status:** Accepted, 2026-09-26. Research 04 may refine the details.
+
+**Context:** We need randomness that can't be predicted and that replays exactly (D-007). Fortuna (used on an earlier project) keeps reseeding itself from pools of new randomness. That's good for unpredictability, but it means a game could never be replayed from its seed.
+
+**Decision:**
+
+- **Seed.** Each room gets 256 bits from the operating system's secure random source (`crypto.getRandomValues`). The seed never leaves the server. 256 bits is more than the roughly 2^226 possible orders of a 52-card deck.
+- **Generator.** ChaCha20 (RFC 8439), keyed by the seed. This is Fortuna's generator without the reseeding: a cipher in counter mode, keyed by a secret. It's cryptographically strong, so seeing a lot of cards doesn't let anyone work backwards to the generator's state.
+- **Library.** `@noble/ciphers`, which is pure TypeScript and independently audited, rather than our own implementation.
+- **Streams.** Each purpose (the deck, bots and so on) gets its own stream, using a different nonce. Adding a random call in one place then doesn't shift every later result.
+- **Shuffle.** Fisher–Yates, drawing unbiased integers by rejection sampling.
+
+**Consequences:** It's deterministic and replayable, and the speed is irrelevant at card-game volumes. Research 04 may still change the details.
+
+## D-025 Colyseus for the room layer, without its state sync
+
+**Status:** Accepted, 2026-09-26. Claude made this decision, as you asked.
+
+**Context:** [Research 08](research/08-colyseus-result.md) evaluated Colyseus for rooms, joining, reconnection and timers. The rules engine stays ours (D-019).
+
+**Decision:** Use Colyseus rooms for these:
+
+- Meet-style codes, set as the room id;
+- joining;
+- `onDrop`, `allowReconnection` and `onReconnect` for grace periods;
+- `clock` for decision timers;
+- `onAuth` for admin codes and lobby approval;
+- message validation and rate limits.
+
+Turn off its state sync (no `@colyseus/schema` or `StateView`), and send each viewer the view our engine computes as a plain message. Keep Colyseus behind a thin adapter in the server package.
+
+**Consequences:**
+
+- We write less of the room layer, and get scaling across processes (Redis) and graceful shutdown for later.
+- Hiding information stays entirely in our engine.
+- Colyseus is still pre-1.0, so expect API changes between versions. The adapter contains them.
+- Restoring rooms after a restart is still ours to build, from the action log (D-014).
+
+## D-026 Absence and reconnection
+
+**Status:** Accepted, 2026-09-26. Claude made this decision, as you asked, based on [research 03](research/03-join-and-reconnect-result.md).
+
+**Context:** D-010 left the grace period and the default absence policies open. Research 03 found three things:
+
+- Phones drop their connection constantly. iOS closes the WebSocket as soon as the screen locks or the player switches apps, and Android Chrome freezes background pages after 1–5 minutes.
+- Players' top complaint about Jackbox is waiting for absent players' timers to run out.
+- What players find fair is that the game carries on without someone who's absent, and a player who comes back gets their seat and score back.
+
+**Decision:**
+
+- **Seats are held for the whole game.** A disconnected player can always come back to their seat and score. A player has only *left* if they say so or an admin removes them. We use Colyseus's `"manual"` reconnection mode for this (D-025).
+- **The game doesn't wait long.** When a decision is waiting on an absent player, everyone sees "Sam is reconnecting…", and the player gets a **60-second grace period**. After that, the game plays that decision's **default action** for them. Each game defines its default actions: in 21 it's *stand*. After the first auto-play, their later decisions are auto-played straight away until they come back.
+- **Admins can act sooner.** At any time, an admin can skip a waiting player, end a timer early, switch the absence policy (wait, auto-play or remove), or remove a player.
+- **In the lobby,** seats are held until the game starts. If someone is still away at the start, the admin can start without them, and they can join at the next point the game allows.
+- **If no admin is connected for 2 minutes,** admin passes to the player who has been connected longest.
+- **A shared screen dropping doesn't pause anything.** Phones show their own decisions and deadlines, and the screen reconnects by itself.
+- **If everyone leaves, the room is kept for 15 minutes,** then closed.
+- **If the reconnect token is lost,** for example in a private tab or the iOS Code Scanner's separate web view, the player sees "Are you Sam? Rejoin". An admin approves the request.
+- **On the client:**
+  - The reconnect token is stored in localStorage and in an HttpOnly cookie.
+  - The client reconnects straight away when the page becomes visible again (`visibilitychange`, `pageshow` with `persisted`, `resume` and `online`), rather than waiting for `onclose`.
+  - An app-level heartbeat treats a missed pong as a dead connection.
+  - The client asks for a screen wake lock after the first tap, asks again whenever the page becomes visible, and shows a "keep your screen on" hint if the wake lock is refused.
+
+**Consequences:**
+
+- Every rules module declares a default action for each kind of decision (see D-010).
+- The 60-second grace period and 15-minute room lifetime are starting values, to be tuned by playing.
+
+## D-027 Room code alphabet
+
+**Status:** Accepted, 2026-09-26. Completes D-011, based on [research 03](research/03-join-and-reconnect-result.md).
+
+**Context:** D-011 chose Meet-style codes (`abc-def-ghi`) and left the alphabet to research 03. Research 03 found:
+
+- the common practice is dropping easily confused characters;
+- a no-vowels alphabet avoids spelling real words;
+- rate-limiting code lookups is what stopped Jackbox's codes from being brute-forced.
+
+**Decision:**
+
+- **The alphabet is 19 consonants,** `bcdfghjkmnpqrstvwxz`: no vowels, and no `l`. Three groups of three give about 3 × 10^11 codes.
+- **Input is forgiving.** Codes are case-insensitive, hyphens are optional, and the code is shown under the QR code.
+- **Bad codes are redrawn:** on a match against a small blocklist, and on a collision with an active room.
+- **Code lookups are rate-limited** per IP address.
+
+**Consequences:** The codes can't spell words, can't be guessed, and are still easy to read aloud one letter at a time.
+
+## D-028 Client and tooling
+
+**Status:** Accepted, 2026-09-26
+
+**Context:** D-008 chose TypeScript. The client framework and tooling were still open.
+
+**Decision:**
+
+- **Client:** Svelte with Vite. The screen and the phone are two views in one app.
+- **Server:** Node LTS running Colyseus (D-025).
+- **Repo:** a pnpm workspace with separate packages: `engine`, `games/*`, `server` and `client`.
+- **Tests:** Vitest.
+
+**Consequences:** The engine package has no dependency on Colyseus or Svelte, so rules stay pure and can be tested on their own.

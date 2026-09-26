@@ -11,8 +11,8 @@ With One More, someone puts it on the TV, everyone scans the QR code with their 
 ## The experience
 
 - **The table.** A shared screen (TV, tablet or laptop) shows what's on the table: the board, the discard pile, scores, whose turn it is. It never shows anything secret.
-- **Your hand.** Each player's phone is their private view, with their hand and their choices. They join in a plain web browser by scanning the QR code or typing a room code like `abc-def-ghi`. No app, no install, no account.
-- **Any device can be a screen.** Opening the room link on another device lets it join as an extra view-only screen.
+- **Your hand.** Each player's phone is their private view, with their hand and their choices. They join in a plain web browser by scanning the QR code or typing a room code like `kfp-nwt-hdz`. No app, no install, no account.
+- **Any device can be a screen.** An admin can turn their own device, or anyone else's, into a shared screen.
 - **Someone runs the room.** Whoever starts the game is its admin and can make others admins too. Admins choose the game and options, control the screens, and decide what happens when someone drops out.
 - **The server runs the game.** It holds the real state, shuffles, deals, enforces the rules, and tells each device only what that device is allowed to see.
 - **Same room first.** Remote play comes later. The architecture shouldn't care where players are sitting. If an admin allows it, anyone with a spectator link can watch from anywhere.
@@ -70,8 +70,11 @@ Parts of this already exist, but nobody seems to combine them. Each is worth stu
 - **Ludii.** An academic "general game system" that describes more than 1,000 traditional games in a language of "ludemes". It shows how far a data-driven rules language can go, and how much one costs to build.
 - **Stanford GDL, RECYCLE/CardStock.** Game and card-game description languages from game-AI research.
 - **OpenSpiel (DeepMind).** A games-research framework. Its split between `legal_actions`, `apply_action` and per-player information state is a useful reference.
+- **Tabletop Games framework (TAG).** An academic Java framework with a component library for modern board games (decks, areas, boards, tokens) and a stack for decisions made out of turn.
 - **Tabletop Simulator.** A physics sandbox that enforces no rules at all: the opposite extreme from us.
 - **Forge / XMage** (Magic: The Gathering rules engines) and **Hearthstone's entity/tag model.** These show how far card-effect engines have to go once the card pool gets large.
+
+The full survey is in [research 01](research/01-game-modelling-result.md).
 
 What sets One More apart is same-room play on a shared screen, instant joining, a casual feel, and one engine that covers both card and board games.
 
