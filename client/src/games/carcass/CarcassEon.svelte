@@ -4,6 +4,7 @@
   import { anchorAt } from '@onemore/carcass-eon/art';
   import type { Session } from '../../lib/session.svelte';
   import Board, { type Hotspot } from './Board.svelte';
+  import Stack from './Stack.svelte';
   import { MEEPLE, seatColour, tileUri } from './tiles';
 
   let { session }: { session: Session } = $props();
@@ -17,7 +18,15 @@
   let seats = $derived(Object.keys(view?.scores ?? {}).sort((a, b) => Number(a.slice(1)) - Number(b.slice(1))));
   let decisions = $derived(message?.decisions ?? []);
   let placeDecision = $derived(decisions.find((d) => d.prompt.kind === 'place'));
-  let followDecision = $derived(decisions.find((d) => d.prompt.kind === 'choose'));
+  const isDraw = (d: (typeof decisions)[number]) => d.prompt.kind === 'choose' && d.prompt.options[0]?.id === 'draw';
+  let drawDecision = $derived(decisions.find(isDraw));
+  let followDecision = $derived(decisions.find((d) => d.prompt.kind === 'choose' && !isDraw(d)));
+  let hints = $derived(view?.hints ?? true);
+  let board: Board | undefined = $state();
+
+  function draw() {
+    if (drawDecision) session.act(drawDecision.id, { option: 'draw' });
+  }
 
   // --- Placing a tile ----------------------------------------------------------------
   let rotation = $state(0);
@@ -44,10 +53,36 @@
     });
   });
 
-  let ghosts = $derived(placeDecision ? (sitesByRotation.get(rotation) ?? []) : []);
-  let preview = $derived(chosenCell && view?.current ? { ...chosenCell, def: view.current, rotation } : null);
+  // Empty squares next to the map: where a tile could go, if it fits.
+  let frontier = $derived.by(() => {
+    if (!view) return [];
+    const taken = new Set(view.board.map((t) => t.cell));
+    const out = new Map<string, { x: number; y: number }>();
+    for (const t of view.board) {
+      for (const [dx, dy] of [[0, -1], [1, 0], [0, 1], [-1, 0]] as const) {
+        const key = `${t.x + dx},${t.y + dy}`;
+        if (!taken.has(key)) out.set(key, { x: t.x + dx, y: t.y + dy });
+      }
+    }
+    return [...out.values()];
+  });
+
+  // With hints on, flashing squares show where the tile fits; with them off, every edge square is a target (D-040).
+  let ghosts = $derived(placeDecision && hints ? (sitesByRotation.get(rotation) ?? []) : []);
+  let targets = $derived(placeDecision && !hints ? frontier : []);
+  let hover = $state<{ x: number; y: number } | null>(null);
+  let shown = $derived(hover ?? chosenCell);
+  let preview = $derived(shown && view?.current ? { ...shown, def: view.current, rotation } : null);
+  let previewState = $derived(!hints || !shown ? null : validAt(shown.x, shown.y).includes(rotation) ? ('ok' as const) : ('bad' as const));
+  let problem = $state('');
+  let shake = $state(0);
 
   function rotate() {
+    problem = '';
+    if (!hints) {
+      rotation = (rotation + 1) % 4;
+      return;
+    }
     for (let i = 1; i <= 4; i++) {
       const r = (rotation + i) % 4;
       const fitsAtChosen = chosenCell ? validAt(chosenCell.x, chosenCell.y).includes(r) : sitesByRotation.has(r);
@@ -58,15 +93,60 @@
     }
   }
 
-  function tapCell(x: number, y: number) {
+  /** Put the tile on a square (tap or drop). With hints on, turn it to a way round that fits. */
+  function chooseCell(x: number, y: number) {
+    problem = '';
     if (chosenCell && chosenCell.x === x && chosenCell.y === y) return rotate();
+    if (hints) {
+      const valid = validAt(x, y);
+      if (valid.length === 0) return refuse('Doesn’t fit there');
+      if (!valid.includes(rotation)) rotation = valid[0]!;
+    } else if (!frontier.some((c) => c.x === x && c.y === y)) {
+      return refuse('It has to touch the map');
+    }
     chosenCell = { x, y };
+  }
+
+  function refuse(message: string) {
+    problem = message;
+    shake += 1;
   }
 
   function confirmPlace() {
     if (!placeDecision || !chosenCell) return;
-    session.act(placeDecision.id, { site: `${chosenCell.x},${chosenCell.y},${rotation}` });
+    const site = `${chosenCell.x},${chosenCell.y},${rotation}`;
+    if (placeDecision.prompt.kind === 'place' && !placeDecision.prompt.sites.includes(site)) {
+      return refuse(validAt(chosenCell.x, chosenCell.y).length ? 'Doesn’t fit this way round' : 'Doesn’t fit there');
+    }
+    session.act(placeDecision.id, { site });
     chosenCell = null;
+  }
+
+  // --- Dragging the tile from your hand onto the map -----------------------------------
+  let drag = $state<{ x: number; y: number } | null>(null);
+  let pressStart: { x: number; y: number } | null = null;
+
+  function handDown(e: PointerEvent) {
+    pressStart = { x: e.clientX, y: e.clientY };
+    (e.currentTarget as Element).setPointerCapture(e.pointerId);
+  }
+
+  function handMove(e: PointerEvent) {
+    if (!pressStart) return;
+    if (!drag && Math.hypot(e.clientX - pressStart.x, e.clientY - pressStart.y) < 8) return;
+    drag = { x: e.clientX, y: e.clientY };
+    const cell = board?.cellAt(e.clientX, e.clientY) ?? null;
+    hover = cell && frontier.some((c) => c.x === cell.x && c.y === cell.y) ? cell : null;
+  }
+
+  function handUp(e: PointerEvent) {
+    const wasDrag = drag !== null;
+    pressStart = null;
+    drag = null;
+    hover = null;
+    if (!wasDrag) return rotate();
+    const cell = board?.cellAt(e.clientX, e.clientY);
+    if (cell) chooseCell(cell.x, cell.y);
   }
 
   // --- Placing a follower ------------------------------------------------------------
@@ -109,6 +189,7 @@
   let recentTile = $derived(view?.lastPlaced ? view.board.find((t) => t.cell === view!.lastPlaced) : undefined);
 
   let ranking = $derived([...seats].sort((a, b) => (view!.scores[b] ?? 0) - (view!.scores[a] ?? 0)));
+  let turnName = $derived(view?.turn ? (names[view.turn] ?? '') : '');
 
   // --- Announcing what just happened ------------------------------------------------
   interface Scored {
@@ -227,6 +308,7 @@
         focus={layout === 'follow' && recentTile ? { x: recentTile.x, y: recentTile.y } : null}
         focusRadius={2}
       />
+      {#if view.phase !== 'done'}<Stack count={view.bag} />{/if}
       {@render announcements()}
     </div>
     <aside>
@@ -242,13 +324,15 @@
         </ol>
         {@render finalBreakdown()}
       {:else}
-        {#if view.current}
+        {#if view.phase === 'draw'}
+          <p class="status">{turnName} is drawing a tile…</p>
+        {:else if view.current}
           <div class="current">
-            <img src={tileUri(view.current, 0)} alt="The tile being placed" />
-            <p>{names[view.turn ?? ''] ?? ''} is placing</p>
+            {#key view.current + view.bag}<img class="fly-in" src={tileUri(view.current, 0)} alt="The tile being placed" />{/key}
+            <p>{turnName} is placing</p>
           </div>
         {:else if view.turn}
-          <p>{names[view.turn]} is choosing a follower</p>
+          <p class="status">{turnName} is choosing a follower</p>
         {/if}
         {@render scoreboard(false)}
         <p class="muted">{view.bag} tiles left{view.farmers ? ' · Farmers on' : ''}</p>
@@ -268,13 +352,17 @@
         highlight={view.lastPlaced}
         {flash}
         {ghosts}
+        {targets}
         {preview}
+        {previewState}
         {hotspots}
         selected={chosenSpot}
         focus={followDecision && lastTile ? { x: lastTile.x, y: lastTile.y } : null}
-        onGhost={tapCell}
+        onGhost={chooseCell}
         onHotspot={(id) => (chosenSpot = id)}
+        bind:this={board}
       />
+      {#if view.phase !== 'done'}<Stack count={view.bag} active={!!drawDecision} onDraw={draw} />{/if}
       {@render announcements()}
     </div>
 
@@ -287,17 +375,35 @@
           {/each}
         </ol>
         {@render finalBreakdown()}
+      {:else if drawDecision}
+        <div class="draw-prompt">
+          <p><strong>Your turn.</strong> Take a tile from the stack ↙</p>
+          <button onclick={draw}>Draw</button>
+        </div>
       {:else if placeDecision && view.current}
         <div class="place">
-          <button class="tile-button" onclick={rotate} aria-label="Rotate the tile">
-            <img src={tileUri(view.current, rotation)} alt="Your tile" />
-            <span>↻</span>
-          </button>
+          {#key view.current + view.bag}
+            <button
+              class="tile-button fly-in"
+              class:dragging={!!drag}
+              aria-label="Your tile: tap to rotate, drag onto the map"
+              onpointerdown={handDown}
+              onpointermove={handMove}
+              onpointerup={handUp}
+            >
+              {#key shake}<img class:shake={shake > 0} src={tileUri(view.current, rotation)} alt="Your tile" />{/key}
+              <span>↻</span>
+            </button>
+          {/key}
           <div class="place-actions">
-            {#if ghosts.length === 0}
-              <p class="hint">No spot fits this way round. Rotate.</p>
+            {#if problem}
+              <p class="hint problem">{problem}</p>
+            {:else if hints && ghosts.length === 0}
+              <p class="hint">No spot fits this way round. Tap the tile to rotate.</p>
             {:else if !chosenCell}
-              <p class="hint">Tap a flashing square. Tap the tile to rotate.</p>
+              <p class="hint">Drag your tile onto the map{hints ? ' (flashing squares fit)' : ''}. Tap it to rotate.</p>
+            {:else}
+              <p class="hint">Tap the tile or the square to rotate.</p>
             {/if}
             <button onclick={confirmPlace} disabled={!chosenCell}>Place tile</button>
           </div>
@@ -313,12 +419,22 @@
       {:else}
         <div class="waiting-turn">
           {#if view.current}<img src={tileUri(view.current, 0)} alt="The tile being placed" />{/if}
-          <p class="hint">{view.turn ? `${names[view.turn]} is playing…` : ''}</p>
+          <p class="hint">
+            {#if view.phase === 'draw'}{turnName} is drawing a tile…{:else if view.phase === 'place'}{turnName} is placing a tile…{:else}{turnName} is choosing a follower…{/if}
+          </p>
         </div>
       {/if}
       {@render adminTools()}
     </section>
   </main>
+  {#if drag && view.current}
+    <img
+      class="floating"
+      src={tileUri(view.current, rotation)}
+      alt=""
+      style="left: {drag.x}px; top: {drag.y}px"
+    />
+  {/if}
 {/if}
 
 <style>
@@ -551,6 +667,64 @@
     align-items: center;
     justify-content: center;
     flex-wrap: wrap;
+  }
+  .status {
+    margin: 0;
+    font-size: 1.2rem;
+  }
+  .draw-prompt {
+    display: flex;
+    gap: 0.75rem;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .draw-prompt p {
+    margin: 0;
+  }
+  .fly-in {
+    animation: fly-in 0.5s cubic-bezier(0.2, 0.8, 0.3, 1.1);
+  }
+  @keyframes fly-in {
+    from {
+      opacity: 0;
+      transform: translate(-30vw, -18vh) scale(0.4) rotate(-20deg);
+    }
+  }
+  .shake {
+    animation: shake 0.4s;
+  }
+  @keyframes shake {
+    20%,
+    60% {
+      transform: translateX(-0.4rem);
+    }
+    40%,
+    80% {
+      transform: translateX(0.4rem);
+    }
+  }
+  .problem {
+    color: #ffb3a8;
+  }
+  .tile-button {
+    touch-action: none;
+  }
+  .tile-button.dragging {
+    opacity: 0.35;
+  }
+  .floating {
+    position: fixed;
+    width: 5.5rem;
+    height: 5.5rem;
+    transform: translate(-50%, -50%) rotate(4deg);
+    pointer-events: none;
+    border-radius: 0.3rem;
+    box-shadow: 0 0.6rem 1.6rem rgb(0 0 0 / 0.55);
+    z-index: 30;
+  }
+  .toasts {
+    top: 0.75rem;
+    bottom: auto;
   }
   .admin {
     display: flex;

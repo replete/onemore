@@ -32,7 +32,9 @@
     tiles,
     followers = [],
     ghosts = [],
+    targets = [],
     preview = null,
+    previewState = null,
     highlight = null,
     flash = [],
     hotspots = [],
@@ -45,7 +47,11 @@
     tiles: Tile[];
     followers?: { seat: string; cell: string; feature: number; kind: string }[];
     ghosts?: { x: number; y: number }[];
+    /** Tappable but invisible squares, for when placement hints are off. */
+    targets?: { x: number; y: number }[];
     preview?: { x: number; y: number; def: string; rotation: number } | null;
+    /** Outline for the preview: fits, doesn't fit, or unknown (hints off). */
+    previewState?: 'ok' | 'bad' | null;
     highlight?: string | null;
     /** Cells to flash briefly, e.g. a feature that just scored. */
     flash?: string[];
@@ -58,6 +64,7 @@
     onHotspot?: (id: string) => void;
   } = $props();
 
+  let svgEl: SVGSVGElement | undefined = $state();
   let width = $state(0);
   let height = $state(0);
   /** Set once the player pans or zooms; cleared by "Fit". */
@@ -186,6 +193,15 @@
     zoomAt(p.x, p.y, Math.exp(e.deltaY * 0.0015));
   }
 
+  /** The board square under a point on screen, e.g. where a dragged tile is dropped. */
+  export function cellAt(clientX: number, clientY: number): { x: number; y: number } | null {
+    if (!svgEl) return null;
+    const r = svgEl.getBoundingClientRect();
+    if (clientX < r.left || clientX > r.right || clientY < r.top || clientY > r.bottom) return null;
+    const p = toBoard(clientX - r.left, clientY - r.top, shown);
+    return { x: Math.floor(p.x / 100), y: Math.floor(p.y / 100) };
+  }
+
   function tap(fn: () => void) {
     return () => {
       if (!dragged) fn();
@@ -202,6 +218,7 @@
 
 <div class="board" bind:clientWidth={width} bind:clientHeight={height}>
   <svg
+    bind:this={svgEl}
     viewBox="{shown.x} {shown.y} {shown.w} {shown.h}"
     onpointerdown={down}
     onpointermove={move}
@@ -249,6 +266,21 @@
       />
     {/each}
 
+    {#each targets as g (`t${g.x},${g.y}`)}
+      <rect
+        class="target"
+        x={g.x * 100}
+        y={g.y * 100}
+        width="100"
+        height="100"
+        role="button"
+        tabindex="-1"
+        aria-label="Try here"
+        onclick={tap(() => onGhost?.(g.x, g.y))}
+        onkeydown={(e) => e.key === 'Enter' && onGhost?.(g.x, g.y)}
+      />
+    {/each}
+
     {#if preview}
       <image
         class="preview"
@@ -258,7 +290,16 @@
         width="100"
         height="100"
       />
-      <rect class="preview-outline" x={preview.x * 100} y={preview.y * 100} width="100" height="100" rx="4" />
+      <rect
+        class="preview-outline"
+        class:ok={previewState === 'ok'}
+        class:bad={previewState === 'bad'}
+        x={preview.x * 100}
+        y={preview.y * 100}
+        width="100"
+        height="100"
+        rx="4"
+      />
     {/if}
 
     {#each followers as f (`${f.cell}#${f.feature}`)}
@@ -361,6 +402,16 @@
     stroke: var(--accent);
     stroke-width: 5;
     pointer-events: none;
+  }
+  .preview-outline.ok {
+    stroke: var(--ok);
+  }
+  .preview-outline.bad {
+    stroke: var(--danger);
+  }
+  .target {
+    fill: transparent;
+    cursor: pointer;
   }
   .meeple {
     stroke: #1d1d1d;

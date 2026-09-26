@@ -54,6 +54,7 @@ Then:
 
 ## Done
 
+- [x] 2026-09-26 Carcass Eon: drawing from a visible stack, dragging the tile from your hand onto the map, and placement hints as an option (D-040). Watched in a live browser session.
 - [x] 2026-09-26 Reliability: clock sync and a heartbeat, "Are you Sam? Rejoin" with admin approval, and a single-process production mode (`pnpm start`), tested in Chrome.
 - [x] 2026-09-26 Game events reach clients, filtered per viewer (`eventsFor`, `visibleTo`), and are covered by the leak tests. Carcass Eon announces scoring and supports screen layouts. A full 71-tile game was played in Chrome.
 - [x] 2026-09-26 Carcass Eon is playable: a game picker and options in the lobby (phone and shared screen), a board with pan and zoom, tile placement with preview and rotation, and follower spots. Tested end to end in Chrome with a TV and two phones.

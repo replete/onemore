@@ -99,8 +99,22 @@ describe('carcass eon', () => {
     }
   });
 
+  it('starts each turn with the player drawing a tile', () => {
+    let s = createMatch(carcassEon, { seats: ['s1', 's2'], options: {}, seed: 'e'.repeat(64) });
+    expect(s.g.phase).toBe('draw');
+    const [d] = decisionsFor(carcassEon, s, 's1');
+    expect(d!.prompt).toEqual({ kind: 'choose', options: [{ id: 'draw', label: 'Draw a tile' }] });
+    expect(decisionsFor(carcassEon, s, 's2')).toEqual([]);
+    const r = submit(carcassEon, s, 's1', { decision: d!.id, answer: { option: 'draw' } });
+    if (!r.ok) throw new Error(r.error);
+    s = r.state;
+    expect(s.g.phase).toBe('place');
+    expect(r.events.find((e) => e.type === 'drew')).toMatchObject({ seat: 's1' });
+  });
+
   it('scores a completed city at once and returns the follower', () => {
     let s = createMatch(carcassEon, { seats: ['s1', 's2'], options: {}, seed: 'a'.repeat(64) });
+    s = act(s, 's1', { option: 'draw' });
     s = forceCurrent(s, 'city-1');
     s = act(s, 's1', { site: '0,-1,2' }); // city faces south onto the start tile's city: completes it
     const [follow] = decisionsFor(carcassEon, s, 's1');
@@ -110,11 +124,13 @@ describe('carcass eon', () => {
     expect(s.g.scores['s1']).toBe(4);
     expect(s.g.supply['s1']).toBe(FOLLOWERS);
     expect(s.g.turn).toBe(1);
+    expect(s.g.phase).toBe('draw');
   });
 
   it('offers fields only when Farmers is on', () => {
     const labels = (farmers: boolean) => {
       let s = createMatch(carcassEon, { seats: ['s1', 's2'], options: { farmers }, seed: 'b'.repeat(64) });
+      s = act(s, 's1', { option: 'draw' });
       s = forceCurrent(s, 'road-straight');
       s = act(s, 's1', { site: '1,0,1' });
       const [d] = decisionsFor(carcassEon, s, 's1');
@@ -124,16 +140,12 @@ describe('carcass eon', () => {
     expect(labels(false)).not.toContain('Field (farmer)');
   });
 
-  it('plays for an absent player: first legal spot, no follower', () => {
+  it('plays for an absent player: draws, takes the first legal spot, no follower', () => {
     let s = createMatch(carcassEon, { seats: ['s1', 's2'], options: {}, seed: 'c'.repeat(64) });
-    const place = carcassEon.decisions(s)[0]!;
-    const r = autoAnswer(carcassEon, s, place.id);
-    if (!r.ok) throw new Error(r.error);
-    s = r.state;
-    if (s.g.phase === 'follow') {
-      const r2 = autoAnswer(carcassEon, s, carcassEon.decisions(s)[0]!.id);
-      if (!r2.ok) throw new Error(r2.error);
-      s = r2.state;
+    for (let i = 0; i < 3 && s.g.turn === 0; i++) {
+      const r = autoAnswer(carcassEon, s, carcassEon.decisions(s)[0]!.id);
+      if (!r.ok) throw new Error(r.error);
+      s = r.state;
     }
     expect(s.g.turn).toBe(1);
     expect(s.g.followers).toEqual([]);
@@ -142,11 +154,13 @@ describe('carcass eon', () => {
   it('never offers a feature someone already holds', () => {
     let s = createMatch(carcassEon, { seats: ['s1', 's2'], options: {}, seed: 'd'.repeat(64) });
     // s1 claims the start tile's road by extending it east.
+    s = act(s, 's1', { option: 'draw' });
     s = forceCurrent(s, 'road-straight');
     s = act(s, 's1', { site: '1,0,1' });
     const roadIndex = tileDef('road-straight').features.findIndex((f) => f.kind === 'road');
     s = act(s, 's1', { option: `f${roadIndex}` });
     // s2 extends the same road west: the road option must not be offered.
+    s = act(s, 's2', { option: 'draw' });
     s = forceCurrent(s, 'road-straight');
     s = act(s, 's2', { site: '-1,0,1' });
     const [d] = decisionsFor(carcassEon, s, 's2');

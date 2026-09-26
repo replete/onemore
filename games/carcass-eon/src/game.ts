@@ -24,6 +24,13 @@ export const meta: GameMeta = {
       type: 'boolean',
       default: true,
     },
+    {
+      id: 'hints',
+      label: 'Show where tiles fit',
+      description: 'Highlight the squares where the drawn tile can go. Switch off to find them yourself.',
+      type: 'boolean',
+      default: true,
+    },
   ],
   layouts: [
     { id: 'whole', label: 'Whole map' },
@@ -32,7 +39,7 @@ export const meta: GameMeta = {
 };
 
 export interface CarcassState {
-  phase: 'place' | 'follow' | 'done';
+  phase: 'draw' | 'place' | 'follow' | 'done';
   /** Index into seats of the player whose turn it is. */
   turn: number;
   /** How many tiles have been placed after the start tile; makes decision ids unique. */
@@ -50,6 +57,8 @@ export interface CarcassState {
   /** Tiles set aside because they fit nowhere (public). */
   discarded: string[];
   farmers: boolean;
+  /** Game option: show players where their tile fits (D-040). */
+  hints: boolean;
 }
 
 export interface CarcassView {
@@ -65,6 +74,7 @@ export interface CarcassView {
   scores: Record<SeatId, number>;
   discarded: string[];
   farmers: boolean;
+  hints: boolean;
 }
 
 type S = MatchState<CarcassState>;
@@ -159,16 +169,19 @@ function finalScoring(g: CarcassState): GameEvent[] {
   return events;
 }
 
+/** Ends the turn: score, pass to the next player, who then draws (D-040). The game ends when the bag is empty. */
 function endTurn(ctx: Ctx, g: CarcassState): GameEvent[] {
   const events = scoreCompleted(g);
   g.lastPlaced = null;
   g.turn = (g.turn + 1) % ctx.seats.length;
-  return [...events, ...drawPlaceable(ctx, g)];
+  if (ctx.table.zone('bag').items.length === 0) return [...events, ...finalScoring(g)];
+  g.phase = 'draw';
+  return events;
 }
 
 export const carcassEon: GameModule<CarcassState> = {
   id: 'carcass-eon',
-  version: '0.2.0',
+  version: '0.3.0',
 
   setup(ctx) {
     if (ctx.seats.length < MIN_SEATS || ctx.seats.length > MAX_SEATS) {
@@ -184,7 +197,7 @@ export const carcassEon: GameModule<CarcassState> = {
     table.shuffle('bag', 'bag');
 
     const g: CarcassState = {
-      phase: 'place',
+      phase: 'draw',
       turn: 0,
       placed: 0,
       board: { [cellKey(0, 0)]: { def: START_TILE, rotation: 0, x: 0, y: 0 } },
@@ -196,14 +209,26 @@ export const carcassEon: GameModule<CarcassState> = {
       scores: Object.fromEntries(seats.map((s) => [s, 0])),
       discarded: [],
       farmers: ctx.options['farmers'] !== false,
+      hints: ctx.options['hints'] !== false,
     };
-    drawPlaceable(ctx, g);
     return g;
   },
 
   decisions(s: S): PendingDecision[] {
     const { g } = s;
     const seat = s.seats[g.turn]!;
+    if (g.phase === 'draw') {
+      return [
+        {
+          id: `d${g.placed}`,
+          seats: [seat],
+          mode: 'one',
+          blocking: true,
+          prompt: { kind: 'choose', options: [{ id: 'draw', label: 'Draw a tile' }] },
+          defaultAnswer: { option: 'draw' },
+        },
+      ];
+    }
     if (g.phase === 'place' && g.current) {
       const def = s.table.components[g.current]!.def;
       const sites = legalPlacements(g.board, def).map((p) => `${p.x},${p.y},${p.rotation}`);
@@ -237,6 +262,12 @@ export const carcassEon: GameModule<CarcassState> = {
   apply(ctx, by, decision, answer) {
     const { g, table } = ctx;
     const seat = by as SeatId;
+
+    if (g.phase === 'draw') {
+      const events = drawPlaceable(ctx, g);
+      const drawn: GameEvent[] = g.current ? [{ type: 'drew', seat, def: table.component(g.current).def }] : [];
+      return [...events, ...drawn];
+    }
 
     if (decision.prompt.kind === 'place' && 'site' in answer) {
       const [x, y, rotation] = answer.site.split(',').map(Number) as [number, number, number];
@@ -279,6 +310,7 @@ export const carcassEon: GameModule<CarcassState> = {
       scores: { ...g.scores },
       discarded: [...g.discarded],
       farmers: g.farmers,
+      hints: g.hints,
     };
   },
 

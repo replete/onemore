@@ -674,3 +674,16 @@ Turn off its state sync (no `@colyseus/schema` or `StateView`), and send each vi
 
 **Consequences:** Tile data includes fields, and which fields touch which cities is derived from the tile slots. End-of-game scoring covers fields.
 
+## D-040 Carcass Eon: drawing, the stack and placement hints
+
+**Status:** Accepted, 2026-09-26. From your feedback while watching a live session.
+
+**Decision:**
+
+- **Drawing is part of your turn.** Each turn starts with a `draw` decision. On your turn the top tile of the stack wiggles; you tap it or drag it and the tile flies into your hand. Absent players draw automatically (D-026).
+- **The stack is visible** in the bottom-left of the map, on the TV and on phones. Its height shows how many tiles are left, and it turns red near the end. Tapping it shows the exact count.
+- **Tiles are dragged onto the map.** You rotate the tile in your hand by tapping it, then drag it onto a square, then confirm.
+- **Placement hints are optional.** A game option, **Show where tiles fit**, is on by default. With it off, nothing is highlighted, and a tile that doesn't fit is refused when you confirm ("Doesn't fit there"). The server always checks the placement either way.
+
+**Consequences:** A turn is three steps: draw, place, then an optional follower. The hints are only a display choice, because where a tile fits can always be worked out from public information.
+

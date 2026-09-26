@@ -220,7 +220,7 @@ describe('choosing a game', () => {
 
     tv.room.send('admin', { type: 'set-game', game: 'carcass-eon' });
     await tv.until(() => tv.latest.room!.game === 'carcass-eon');
-    expect(tv.latest.room!.options).toEqual({ farmers: true });
+    expect(tv.latest.room!.options).toEqual({ farmers: true, hints: true });
     tv.room.send('admin', { type: 'set-option', option: 'farmers', value: false });
     await tv.until(() => tv.latest.room!.options['farmers'] === false);
 
@@ -237,9 +237,13 @@ describe('choosing a game', () => {
     expect(view.board).toHaveLength(1);
     expect(view.farmers).toBe(false);
 
-    // Whoever has the place decision places the tile somewhere legal.
+    // Whoever's turn it is draws a tile, then places it somewhere legal.
     await Promise.all([sam, jo].map((t) => t.until(() => t.latest.view !== undefined)));
-    const mover = [sam, jo].find((t) => t.latest.view!.decisions.some((d) => d.prompt.kind === 'place'))!;
+    const mover = [sam, jo].find((t) => t.latest.view!.decisions.length > 0)!;
+    const draw = mover.latest.view!.decisions[0]!;
+    expect(draw.prompt).toEqual({ kind: 'choose', options: [{ id: 'draw', label: 'Draw a tile' }] });
+    mover.room.send('act', { decision: draw.id, answer: { option: 'draw' } });
+    await mover.until(() => mover.latest.view!.decisions.some((x) => x.prompt.kind === 'place'));
     const d = mover.latest.view!.decisions[0]!;
     const rev = tv.latest.view!.rev;
     mover.room.send('act', { decision: d.id, answer: { site: d.prompt.kind === 'place' ? d.prompt.sites[0] : '' } });
