@@ -349,6 +349,11 @@
     display: block;
     touch-action: none;
     user-select: none;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
+  }
+  svg :global(image) {
+    -webkit-user-drag: none;
   }
   .highlight {
     fill: none;

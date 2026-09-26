@@ -139,6 +139,12 @@
     hover = cell && frontier.some((c) => c.x === cell.x && c.y === cell.y) ? cell : null;
   }
 
+  function handCancel() {
+    pressStart = null;
+    drag = null;
+    hover = null;
+  }
+
   function handUp(e: PointerEvent) {
     const wasDrag = drag !== null;
     pressStart = null;
@@ -390,8 +396,9 @@
               onpointerdown={handDown}
               onpointermove={handMove}
               onpointerup={handUp}
+              onpointercancel={handCancel}
             >
-              {#key shake}<img class:shake={shake > 0} src={tileUri(view.current, rotation)} alt="Your tile" />{/key}
+              {#key shake}<img class:shake={shake > 0} src={tileUri(view.current, rotation)} alt="Your tile" draggable="false" />{/key}
               <span>↻</span>
             </button>
           {/key}
@@ -708,6 +715,13 @@
   }
   .tile-button {
     touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
+  }
+  .tile-button img {
+    -webkit-user-drag: none;
+    pointer-events: none;
   }
   .tile-button.dragging {
     opacity: 0.35;
