@@ -117,28 +117,31 @@ This is the hard, interesting part, and the part we'll revise most. [Research 01
 
 ### 3.1 The engine contract
 
-Every game implements the same small interface, and everything else is helpers.
+Every game implements the same small interface, and everything else is helpers. As built in `engine/src/match.ts`:
 
 ```ts
-interface GameModule<State, Action> {
+interface GameModule<G> {
   id: string;                                       // "twenty-one"
   version: string;
-  setup(ctx: SetupContext): State;                  // seats, options, content, rng
-  decisions(state: State): PendingDecision[];       // who must decide what, right now (§3.4)
-  apply(state: State, by: SeatId | "system", action: Action, ctx: ApplyContext): { state: State; events: GameEvent[] };
-  view(state: State, viewer: Viewer): View;         // what this seat, screen or spectator may see
-  outcome(state: State): Outcome | null;            // null while the game is in progress
+  setup(ctx: SetupContext): G;                      // ctx: seats, options, table, rng
+  decisions(state: MatchState<G>): PendingDecision[]; // who must decide what, right now (§3.4)
+  apply(ctx: ApplyContext<G>, by: SeatId | 'system', decision: PendingDecision, answer: Answer): GameEvent[] | void;
+  view(state: MatchState<G>, viewer: Viewer): unknown; // what this seat, screen or spectator may see
+  outcome(state: MatchState<G>): Outcome | null;    // null while the game is in progress
 }
 
 interface PendingDecision {
-  id: string;
+  id: string;                                       // deterministic, derived from the state
   seats: SeatId[];                                  // who it's waiting on
-  mode: "one" | "each" | "any";                     // one seat / every seat answers / first answer wins
-  prompt: Prompt;                                   // the typed choices (§3.5)
+  mode: 'one' | 'each' | 'any';                     // one seat / every seat answers / first answer wins
   blocking: boolean;                                // false = play carries on around it (D-023)
+  prompt: Prompt;                                   // the typed choices (§3.5)
   timerMs?: number;                                 // a duration, never a clock time
+  defaultAnswer?: Answer;                           // played on timeout or absence (D-026); never sent to clients
 }
 ```
+
+`apply` mutates a draft. The engine clones the state before every setup and apply, so from the outside each step is still pure: the same state and answer always give the same new state. Rules reach the table and randomness only through `ctx.table` and `ctx.rng`.
 
 The server only accepts an action if it answers one of the current pending decisions and comes from a seat that decision is waiting on (D-018).
 

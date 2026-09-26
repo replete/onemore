@@ -1,0 +1,26 @@
+{
+  "name": "@onemore/client",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host",
+    "build": "vite build",
+    "preview": "vite preview --host",
+    "typecheck": "svelte-check --tsconfig ./tsconfig.json"
+  },
+  "dependencies": {
+    "@colyseus/sdk": "^0.18.4",
+    "qrcode": "^1.5.4"
+  },
+  "devDependencies": {
+    "@onemore/engine": "workspace:*",
+    "@onemore/server": "workspace:*",
+    "@onemore/twenty-one": "workspace:*",
+    "@sveltejs/vite-plugin-svelte": "^7.3.1",
+    "@types/qrcode": "^1.5.6",
+    "svelte": "^5.57.1",
+    "svelte-check": "^4.7.6",
+    "vite": "^8.3.1"
+  }
+}
